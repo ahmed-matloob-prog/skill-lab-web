@@ -1,0 +1,21 @@
+{
+  "name": "skill-lab-web-trainer",
+  "version": "1.0.0",
+  "description": "Skill Lab Web - Student Attendance Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "install-deps": "npm install express"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "keywords": [
+    "student",
+    "attendance",
+    "management",
+    "education"
+  ],
+  "author": "Skill Lab",
+  "license": "MIT"
+}

@@ -1,0 +1,716 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Typography,
+  Tabs,
+  Tab,
+  Card,
+  CardContent,
+  Grid,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Alert,
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  IconButton,
+} from '@mui/material';
+import {
+  Add,
+  Edit,
+  Delete,
+  People,
+  School,
+  Assessment,
+  Quiz,
+} from '@mui/icons-material';
+import { useDatabase } from '../contexts/DatabaseContext';
+import { useAuth } from '../contexts/AuthContext';
+import { User, Group } from '../types';
+import AuthService from '../services/authService';
+import AdminReport from './AdminReport';
+import TrainerReports from './TrainerReports';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`admin-tabpanel-${index}`}
+      aria-labelledby={`admin-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+const Admin: React.FC = () => {
+  const { groups, addGroup, updateGroup, deleteGroup, students, attendance, assessments, loading, ensureAllGroupsExist } = useDatabase();
+  const { user } = useAuth();
+  
+  const [tabValue, setTabValue] = useState(0);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  // User management state
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userForm, setUserForm] = useState({
+    username: '',
+    email: '',
+    role: 'trainer' as 'admin' | 'trainer',
+    assignedGroups: [] as string[],
+    assignedYears: [] as number[],
+    password: '',
+  });
+  
+  // Group management state
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [groupForm, setGroupForm] = useState({
+    name: '',
+    description: '',
+  });
+  
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      loadUsers();
+    }
+  }, [user]);
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const usersData = await AuthService.getAllUsers();
+      setUsers(usersData);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  // User management functions
+  const handleOpenUserDialog = (user?: User) => {
+    if (user) {
+      setEditingUser(user);
+      setUserForm({
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        assignedGroups: user.assignedGroups || [],
+        assignedYears: user.assignedYears || [],
+        password: '',
+      });
+    } else {
+      setEditingUser(null);
+      setUserForm({
+        username: '',
+        email: '',
+        role: 'trainer',
+        assignedGroups: [],
+        assignedYears: [],
+        password: '',
+      });
+    }
+    setError(null);
+    setUserDialogOpen(true);
+  };
+
+  const handleCloseUserDialog = () => {
+    setUserDialogOpen(false);
+    setEditingUser(null);
+    setError(null);
+  };
+
+  const handleSaveUser = async () => {
+    if (!userForm.username.trim() || !userForm.email.trim()) {
+      setError('Username and email are required');
+      return;
+    }
+
+    if (!editingUser && !userForm.password.trim()) {
+      setError('Password is required for new users');
+      return;
+    }
+
+    try {
+      if (editingUser) {
+        await AuthService.updateUser(editingUser.id, {
+          username: userForm.username.trim(),
+          email: userForm.email.trim(),
+          role: userForm.role,
+          assignedGroups: userForm.assignedGroups,
+          assignedYears: userForm.assignedYears,
+        });
+      } else {
+        await AuthService.createUser({
+          username: userForm.username.trim(),
+          email: userForm.email.trim(),
+          role: userForm.role,
+          assignedGroups: userForm.assignedGroups,
+          assignedYears: userForm.assignedYears,
+          isActive: true,
+        }, userForm.password);
+      }
+
+      handleCloseUserDialog();
+      loadUsers();
+    } catch (error) {
+      setError('Failed to save user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      try {
+        await AuthService.deleteUser(userId);
+        loadUsers();
+      } catch (error) {
+        setError('Failed to delete user');
+      }
+    }
+  };
+
+  // Group management functions
+  const handleOpenGroupDialog = (group?: Group) => {
+    if (group) {
+      setEditingGroup(group);
+      setGroupForm({
+        name: group.name,
+        description: group.description || '',
+      });
+    } else {
+      setEditingGroup(null);
+      setGroupForm({
+        name: '',
+        description: '',
+      });
+    }
+    setError(null);
+    setGroupDialogOpen(true);
+  };
+
+  const handleCloseGroupDialog = () => {
+    setGroupDialogOpen(false);
+    setEditingGroup(null);
+    setError(null);
+  };
+
+  const handleSaveGroup = async () => {
+    if (!groupForm.name.trim()) {
+      setError('Group name is required');
+      return;
+    }
+
+    try {
+      if (editingGroup) {
+        await updateGroup(editingGroup.id, {
+          ...groupForm,
+          year: 1, // Groups are available for all years
+        });
+      } else {
+        await addGroup({
+          ...groupForm,
+          year: 1, // Groups are available for all years
+        });
+      }
+
+      handleCloseGroupDialog();
+    } catch (error) {
+      setError('Failed to save group');
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (window.confirm('Are you sure you want to clear this group? This will remove all students, attendance, and assessment records from this group, but the group will remain available for future use.')) {
+      try {
+        await deleteGroup(groupId);
+      } catch (error) {
+        setError('Failed to clear group data');
+      }
+    }
+  };
+
+  const handleEnsureAllGroups = async () => {
+    try {
+      await ensureAllGroupsExist();
+      setError(null);
+    } catch (error) {
+      setError('Failed to ensure all groups exist');
+    }
+  };
+
+  if (user?.role !== 'admin') {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <Alert severity="error">
+          Access denied. Admin privileges required.
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Typography variant="h4" gutterBottom>
+        Admin Panel
+      </Typography>
+
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={tabValue} onChange={handleTabChange} aria-label="admin tabs">
+          <Tab label="Overview" />
+          <Tab label="User Management" />
+          <Tab label="Group Management" />
+          <Tab label="System Statistics" />
+          <Tab label="Grand Report" />
+          <Tab label="Trainer Reports" />
+        </Tabs>
+      </Box>
+
+      <TabPanel value={tabValue} index={0}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <People sx={{ color: 'primary.main', mr: 2 }} />
+                  <Box>
+                    <Typography variant="h4">{users.length}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Users
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <School sx={{ color: 'success.main', mr: 2 }} />
+                  <Box>
+                    <Typography variant="h4">{groups.length}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Groups
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Assessment sx={{ color: 'warning.main', mr: 2 }} />
+                  <Box>
+                    <Typography variant="h4">{students.length}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Students
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Quiz sx={{ color: 'error.main', mr: 2 }} />
+                  <Box>
+                    <Typography variant="h4">{attendance.length + assessments.length}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Records
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={1}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6">
+            User Management ({users.length})
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => handleOpenUserDialog()}
+          >
+            Add User
+          </Button>
+        </Box>
+
+        {loadingUsers ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Username</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Role</TableCell>
+                  <TableCell>Assigned Groups</TableCell>
+                  <TableCell>Assigned Years</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.role}
+                        color={user.role === 'admin' ? 'error' : 'primary'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {user.assignedGroups?.length || 0} groups
+                    </TableCell>
+                    <TableCell>
+                      {user.assignedYears?.length ? 
+                        user.assignedYears.map(year => `Year ${year}`).join(', ') : 
+                        'None'
+                      }
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.isActive ? 'Active' : 'Inactive'}
+                        color={user.isActive ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenUserDialog(user)}
+                      >
+                        <Edit />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteUser(user.id)}
+                        color="error"
+                      >
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={2}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6">
+            Group Management ({groups.length})
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={() => handleEnsureAllGroups()}
+            >
+              Ensure All Groups (1-30)
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => handleOpenGroupDialog()}
+            >
+              Add Group
+            </Button>
+          </Box>
+        </Box>
+
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Group Name</TableCell>
+                <TableCell>Year</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Students</TableCell>
+                <TableCell align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {groups.map((group) => (
+                <TableRow key={group.id}>
+                  <TableCell>{group.name}</TableCell>
+                  <TableCell>
+                    <Chip label={`Year ${group.year}`} size="small" />
+                  </TableCell>
+                  <TableCell>{group.description}</TableCell>
+                  <TableCell>
+                    {students.filter(s => s.groupId === group.id).length}
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleOpenGroupDialog(group)}
+                    >
+                      <Edit />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDeleteGroup(group.id)}
+                      color="error"
+                    >
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={3}>
+        <Typography variant="h6" gutterBottom>
+          System Statistics
+        </Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Attendance Statistics
+                </Typography>
+                <Typography variant="body2">
+                  Total Records: {attendance.length}
+                </Typography>
+                <Typography variant="body2">
+                  Present: {attendance.filter(a => a.status === 'present').length}
+                </Typography>
+                <Typography variant="body2">
+                  Late: {attendance.filter(a => a.status === 'late').length}
+                </Typography>
+                <Typography variant="body2">
+                  Absent: {attendance.filter(a => a.status === 'absent').length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Assessment Statistics
+                </Typography>
+                <Typography variant="body2">
+                  Total Records: {assessments.length}
+                </Typography>
+                <Typography variant="body2">
+                  Average Score: {assessments.length > 0 ? Math.round(assessments.reduce((sum, a) => sum + a.score, 0) / assessments.length) : 0}
+                </Typography>
+                <Typography variant="body2">
+                  Exams: {assessments.filter(a => a.assessmentType === 'exam').length}
+                </Typography>
+                <Typography variant="body2">
+                  Quizzes: {assessments.filter(a => a.assessmentType === 'quiz').length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={4}>
+        <AdminReport />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={5}>
+        <TrainerReports />
+      </TabPanel>
+
+      {/* User Dialog */}
+      <Dialog open={userDialogOpen} onClose={handleCloseUserDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editingUser ? 'Edit User' : 'Add New User'}
+        </DialogTitle>
+        <DialogContent>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Username *"
+                value={userForm.username}
+                onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Email *"
+                type="email"
+                value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Role *</InputLabel>
+                <Select
+                  value={userForm.role}
+                  label="Role *"
+                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value as 'admin' | 'trainer' })}
+                >
+                  <MenuItem value="trainer">Trainer</MenuItem>
+                  <MenuItem value="admin">Admin</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label={editingUser ? "New Password (leave empty to keep current)" : "Password *"}
+                type="password"
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Assigned Groups</InputLabel>
+                <Select
+                  multiple
+                  value={userForm.assignedGroups}
+                  label="Assigned Groups"
+                  onChange={(e) => setUserForm({ ...userForm, assignedGroups: e.target.value as string[] })}
+                >
+                  {groups.map(group => (
+                    <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Assigned Years</InputLabel>
+                <Select
+                  multiple
+                  value={userForm.assignedYears}
+                  label="Assigned Years"
+                  onChange={(e) => setUserForm({ ...userForm, assignedYears: e.target.value as number[] })}
+                >
+                  {[1, 2, 3, 4, 5, 6].map(year => (
+                    <MenuItem key={year} value={year}>Year {year}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseUserDialog}>Cancel</Button>
+          <Button onClick={handleSaveUser} variant="contained">
+            {editingUser ? 'Update' : 'Add'} User
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Group Dialog */}
+      <Dialog open={groupDialogOpen} onClose={handleCloseGroupDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editingGroup ? 'Edit Group' : 'Add New Group'}
+        </DialogTitle>
+        <DialogContent>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Group Name *"
+                value={groupForm.name}
+                onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                helperText="Groups are available for all years (1-6)"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                multiline
+                rows={3}
+                value={groupForm.description}
+                onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
+                placeholder="Optional description for this group"
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseGroupDialog}>Cancel</Button>
+          <Button onClick={handleSaveGroup} variant="contained">
+            {editingGroup ? 'Update' : 'Add'} Group
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default Admin;
+
+

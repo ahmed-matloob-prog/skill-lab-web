@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Browser Issues</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            background-color: #f8f9fa;
+        }
+        .code {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .button {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background-color: #1976D2;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix Browser Issues - Skill Lab Web</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Warning:</strong> This will clear all your browser data for this site. Make sure to save any important data first.
+        </div>
+
+        <div class="step">
+            <h3>Step 1: Clear Browser Cache</h3>
+            <p>Press <strong>Ctrl + Shift + R</strong> (Windows) or <strong>Cmd + Shift + R</strong> (Mac) to hard refresh the page.</p>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Clear Application Data</h3>
+            <p>Open Developer Tools (F12) and run this code in the Console tab:</p>
+            <div class="code">
+                // Clear all application data
+                localStorage.clear();
+                sessionStorage.clear();
+                console.log('✅ All application data cleared');
+                location.reload();
+            </div>
+            <button class="button" onclick="clearData()">Clear Data & Reload</button>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Check for Students</h3>
+            <p>After clearing data, check what students are in the system:</p>
+            <div class="code">
+                const students = JSON.parse(localStorage.getItem('students') || '[]');
+                console.log('Current students:', students.length);
+                if (students.length > 0) {
+                    students.forEach((student, i) => {
+                        console.log(`${i+1}. ${student.name} - Year ${student.year}, Group ${student.groupId}`);
+                    });
+                } else {
+                    console.log('✅ No students found - system is clean');
+                }
+            </div>
+            <button class="button" onclick="checkStudents()">Check Students</button>
+        </div>
+
+        <div class="step">
+            <h3>Step 4: Test Excel Import</h3>
+            <p>Now try importing your Excel file again. The error messages should be much clearer.</p>
+        </div>
+
+        <div class="step">
+            <h3>Step 5: If Still Having Issues</h3>
+            <p>Try these additional steps:</p>
+            <ul>
+                <li>Open the app in an <strong>incognito/private window</strong></li>
+                <li>Disable browser extensions temporarily</li>
+                <li>Try a different browser (Chrome, Firefox, Edge)</li>
+                <li>Check the Console tab for specific error messages</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Excel Import Tips</h3>
+            <ul>
+                <li><strong>Group Format:</strong> Use "Group1", "Group2", etc. (not "group-1")</li>
+                <li><strong>Year Format:</strong> Use numbers 1-6 (not text)</li>
+                <li><strong>File Format:</strong> Use .xlsx or .xls files</li>
+                <li><strong>Column Names:</strong> "Student Name", "Year", "Group"</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function clearData() {
+            localStorage.clear();
+            sessionStorage.clear();
+            console.log('✅ All application data cleared');
+            alert('Data cleared! The page will reload now.');
+            location.reload();
+        }
+
+        function checkStudents() {
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            console.log('Current students:', students.length);
+            if (students.length > 0) {
+                console.log('Students found:');
+                students.forEach((student, i) => {
+                    console.log(`${i+1}. ${student.name} - Year ${student.year}, Group ${student.groupId}`);
+                });
+                alert(`Found ${students.length} students. Check the console for details.`);
+            } else {
+                console.log('✅ No students found - system is clean');
+                alert('No students found - system is clean!');
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Import Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Import Debug Tool</h1>
+    
+    <div class="debug-section info">
+        <h3>📊 Current Data Status</h3>
+        <button onclick="checkData()">Check Current Data</button>
+        <div id="dataStatus"></div>
+    </div>
+    
+    <div class="debug-section info">
+        <h3>🧹 Clear Data</h3>
+        <button onclick="clearAllData()" style="background-color: #dc3545; color: white;">Clear All Data</button>
+        <button onclick="clearStudents()" style="background-color: #ffc107; color: black;">Clear Students Only</button>
+    </div>
+    
+    <div class="debug-section info">
+        <h3>📝 Test Data Creation</h3>
+        <button onclick="createTestStudents()">Create Test Students</button>
+        <button onclick="createTestGroups()">Create Test Groups</button>
+    </div>
+    
+    <div class="debug-section info">
+        <h3>🔄 Refresh Test</h3>
+        <button onclick="testRefresh()">Test Refresh Mechanism</button>
+        <div id="refreshStatus"></div>
+    </div>
+
+    <script>
+        function checkData() {
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            const groups = JSON.parse(localStorage.getItem('groups') || '[]');
+            
+            const statusDiv = document.getElementById('dataStatus');
+            statusDiv.innerHTML = `
+                <h4>Current Data:</h4>
+                <p><strong>Students:</strong> ${students.length}</p>
+                <p><strong>Groups:</strong> ${groups.length}</p>
+                <details>
+                    <summary>View Students Data</summary>
+                    <pre>${JSON.stringify(students, null, 2)}</pre>
+                </details>
+                <details>
+                    <summary>View Groups Data</summary>
+                    <pre>${JSON.stringify(groups, null, 2)}</pre>
+                </details>
+            `;
+        }
+        
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear ALL data?')) {
+                localStorage.clear();
+                alert('All data cleared!');
+                checkData();
+            }
+        }
+        
+        function clearStudents() {
+            if (confirm('Are you sure you want to clear students data?')) {
+                localStorage.removeItem('students');
+                alert('Students data cleared!');
+                checkData();
+            }
+        }
+        
+        function createTestStudents() {
+            const testStudents = [
+                {
+                    id: 'test-student-1',
+                    name: 'Test Student 1',
+                    studentId: 'TS001',
+                    year: 1,
+                    groupId: 'group-1',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'test-student-2',
+                    name: 'Test Student 2',
+                    studentId: 'TS002',
+                    year: 2,
+                    groupId: 'group-2',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            
+            localStorage.setItem('students', JSON.stringify(testStudents));
+            alert('Test students created!');
+            checkData();
+        }
+        
+        function createTestGroups() {
+            const testGroups = [
+                {
+                    id: 'group-1',
+                    name: 'Group1',
+                    year: 1,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'group-2',
+                    name: 'Group2',
+                    year: 2,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            
+            localStorage.setItem('groups', JSON.stringify(testGroups));
+            alert('Test groups created!');
+            checkData();
+        }
+        
+        function testRefresh() {
+            const refreshDiv = document.getElementById('refreshStatus');
+            refreshDiv.innerHTML = '<p>Testing refresh mechanism...</p>';
+            
+            // Simulate the refresh process
+            setTimeout(() => {
+                const students = JSON.parse(localStorage.getItem('students') || '[]');
+                refreshDiv.innerHTML = `
+                    <p><strong>Refresh Test Results:</strong></p>
+                    <p>Students found: ${students.length}</p>
+                    <p>Timestamp: ${new Date().toLocaleString()}</p>
+                `;
+            }, 1000);
+        }
+        
+        // Auto-check data on page load
+        window.onload = function() {
+            checkData();
+        };
+    </script>
+</body>
+</html>
+
+
+
+
+
+

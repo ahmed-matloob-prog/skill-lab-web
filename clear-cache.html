@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache & Test Import</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧹 Cache Clear & Import Test</h1>
+    
+    <div class="section info">
+        <h3>📊 Current Status</h3>
+        <button onclick="checkStatus()">Check Current Status</button>
+        <div id="status"></div>
+    </div>
+    
+    <div class="section info">
+        <h3>🧹 Clear Everything</h3>
+        <button onclick="clearAll()" style="background-color: #dc3545; color: white;">Clear All Data & Cache</button>
+        <button onclick="clearLocalStorage()" style="background-color: #ffc107; color: black;">Clear LocalStorage Only</button>
+    </div>
+    
+    <div class="section info">
+        <h3>🔄 Test Import Process</h3>
+        <button onclick="testImportProcess()">Test Import Process</button>
+        <div id="importTest"></div>
+    </div>
+    
+    <div class="section info">
+        <h3>📝 Instructions</h3>
+        <ol>
+            <li>Click "Clear All Data & Cache" to start fresh</li>
+            <li>Go to <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></li>
+            <li>Login with admin/admin123</li>
+            <li>Go to Students page</li>
+            <li>Try importing your Excel file</li>
+            <li>Check browser console (F12) for debug messages</li>
+        </ol>
+    </div>
+
+    <script>
+        function checkStatus() {
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            const groups = JSON.parse(localStorage.getItem('groups') || '[]');
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `
+                <h4>Current Data Status:</h4>
+                <p><strong>Students:</strong> ${students.length}</p>
+                <p><strong>Groups:</strong> ${groups.length}</p>
+                <p><strong>Users:</strong> ${users.length}</p>
+                <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
+            `;
+        }
+        
+        function clearAll() {
+            if (confirm('Clear ALL data and cache? This will remove everything!')) {
+                // Clear localStorage
+                localStorage.clear();
+                
+                // Clear sessionStorage
+                sessionStorage.clear();
+                
+                // Try to clear cache (this may not work in all browsers)
+                if ('caches' in window) {
+                    caches.keys().then(function(names) {
+                        for (let name of names) {
+                            caches.delete(name);
+                        }
+                    });
+                }
+                
+                alert('All data and cache cleared! Please refresh the main application.');
+                checkStatus();
+            }
+        }
+        
+        function clearLocalStorage() {
+            if (confirm('Clear localStorage only?')) {
+                localStorage.clear();
+                alert('LocalStorage cleared!');
+                checkStatus();
+            }
+        }
+        
+        function testImportProcess() {
+            const testDiv = document.getElementById('importTest');
+            testDiv.innerHTML = '<p>Testing import process...</p>';
+            
+            // Create test data
+            const testStudents = [
+                {
+                    id: 'test-1',
+                    name: 'Test Student 1',
+                    studentId: 'TS001',
+                    year: 1,
+                    groupId: 'group-1',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'test-2',
+                    name: 'Test Student 2',
+                    studentId: 'TS002',
+                    year: 2,
+                    groupId: 'group-2',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            
+            const testGroups = [
+                {
+                    id: 'group-1',
+                    name: 'Group1',
+                    year: 1,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'group-2',
+                    name: 'Group2',
+                    year: 2,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            
+            // Save test data
+            localStorage.setItem('students', JSON.stringify(testStudents));
+            localStorage.setItem('groups', JSON.stringify(testGroups));
+            
+            setTimeout(() => {
+                const students = JSON.parse(localStorage.getItem('students') || '[]');
+                testDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ Test Import Successful!</h4>
+                        <p>Created ${students.length} test students</p>
+                        <p>Now go to the main app and check if they appear in the Students page.</p>
+                    </div>
+                `;
+            }, 1000);
+        }
+        
+        // Auto-check status on page load
+        window.onload = function() {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>
+
+
+
+
+
+
