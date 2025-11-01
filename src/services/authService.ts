@@ -133,16 +133,24 @@ class AuthService {
   // Find password by username (case-insensitive lookup)
   private findPasswordByUsername(username: string, passwords: { [username: string]: string }): string | undefined {
     const normalized = this.normalizeUsername(username);
+    console.log('findPasswordByUsername: Looking for username:', username, 'normalized:', normalized);
+    console.log('findPasswordByUsername: Available password keys:', Object.keys(passwords));
+    console.log('findPasswordByUsername: passwords[username]:', passwords[username]);
+    console.log('findPasswordByUsername: passwords[normalized]:', passwords[normalized]);
+    
     // Try exact match first (for performance)
     if (passwords[username]) {
+      console.log('findPasswordByUsername: Found via exact match');
       return passwords[username];
     }
     // Try normalized match
     if (passwords[normalized]) {
+      console.log('findPasswordByUsername: Found via normalized match');
       return passwords[normalized];
     }
     // Try case-insensitive search through all keys
     const matchingKey = Object.keys(passwords).find(key => this.normalizeUsername(key) === normalized);
+    console.log('findPasswordByUsername: Case-insensitive search found key:', matchingKey);
     return matchingKey ? passwords[matchingKey] : undefined;
   }
 
