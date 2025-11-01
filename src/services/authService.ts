@@ -274,7 +274,6 @@ class AuthService {
     // Add password to stored passwords (in a real app, this would be hashed)
     // Store password with normalized username as key for consistent lookup
     const passwords = this.getPasswords();
-    const normalizedUsername = this.normalizeUsername(userData.username);
     passwords[normalizedUsername] = password;
     // Also store with original username for backwards compatibility
     if (normalizedUsername !== userData.username) {
