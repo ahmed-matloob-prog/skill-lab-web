@@ -176,7 +176,23 @@ const Admin: React.FC = () => {
           assignedGroups: userForm.assignedGroups,
           assignedYears: userForm.assignedYears,
         });
+        // Update password if provided
+        if (userForm.password.trim()) {
+          console.log('Admin: Updating password for user:', editingUser.username);
+          // Get current password to pass as oldPassword (for admin override, we'll need a different method)
+          // For now, we'll directly update the password in the service
+          const passwords = JSON.parse(localStorage.getItem('userPasswords') || '{}');
+          const normalizedUsername = editingUser.username.toLowerCase().trim();
+          passwords[normalizedUsername] = userForm.password.trim();
+          if (normalizedUsername !== editingUser.username) {
+            passwords[editingUser.username] = userForm.password.trim();
+          }
+          localStorage.setItem('userPasswords', JSON.stringify(passwords));
+          console.log('Admin: Password updated successfully');
+        }
       } else {
+        console.log('Admin: Creating user with password from form:', userForm.password);
+        console.log('Admin: Password length:', userForm.password.length);
         await AuthService.createUser({
           username: userForm.username.trim(),
           email: userForm.email.trim(),

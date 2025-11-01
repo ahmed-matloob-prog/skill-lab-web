@@ -125,7 +125,7 @@ const AppContent: React.FC = () => {
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginForm />} 
         />
         <Route
-          path="/"
+          path="/*"
           element={
             <ProtectedRoute>
               <Layout>
@@ -145,58 +145,6 @@ const AppContent: React.FC = () => {
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/students"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Students />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/input"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <CombinedInput />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sync"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Sync />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminRoute>
-                <Layout>
-                  <Admin />
-                </Layout>
-              </AdminRoute>
             </ProtectedRoute>
           }
         />

@@ -23,7 +23,7 @@ const LoginForm: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim() || isLoading) {
       return;
     }
 

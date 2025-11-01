@@ -150,20 +150,35 @@ class AuthService {
     const { username, password } = credentials;
     const normalizedUsername = this.normalizeUsername(username);
     
+    console.log('AuthService: Login attempt for username:', username, 'normalized:', normalizedUsername);
+    
     // Find user by username (case-insensitive)
     const users = this.getUsers();
+    console.log('AuthService: Total users found:', users.length);
     const user = users.find(u => this.normalizeUsername(u.username) === normalizedUsername && u.isActive);
     
     if (!user) {
+      console.error('AuthService: User not found or not active:', username);
       throw new Error('Invalid username or password');
     }
+
+    console.log('AuthService: User found:', user.username, 'role:', user.role);
 
     // Check password (in a real app, this would be hashed)
     const passwords = this.getPasswords();
     const correctPassword = this.findPasswordByUsername(username, passwords);
+    console.log('AuthService: Password lookup result:', correctPassword ? 'Found' : 'Not found');
+    console.log('AuthService: Input password length:', password.length, 'Correct password length:', correctPassword?.length);
+    console.log('AuthService: Input password:', password, 'Correct password:', correctPassword);
+    console.log('AuthService: Passwords match?', password === correctPassword);
+    
     if (!correctPassword || password !== correctPassword) {
+      console.error('AuthService: Password mismatch for user:', username);
+      console.error('AuthService: Expected:', correctPassword, 'Got:', password);
       throw new Error('Invalid username or password');
     }
+    
+    console.log('AuthService: Login successful for user:', username);
 
     // Update last login
     const updatedUser = {
@@ -252,6 +267,9 @@ class AuthService {
   }
 
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'lastLogin'>, password: string): Promise<User> {
+    console.log('AuthService: createUser called with username:', userData.username, 'password length:', password.length);
+    console.log('AuthService: createUser received password:', password);
+    
     const users = this.getUsers();
     const normalizedUsername = this.normalizeUsername(userData.username);
     
@@ -279,6 +297,11 @@ class AuthService {
     if (normalizedUsername !== userData.username) {
       passwords[userData.username] = password;
     }
+    
+    console.log('AuthService: Saving password for user:', userData.username, 'normalized:', normalizedUsername);
+    console.log('AuthService: Password being saved:', password);
+    console.log('AuthService: Password stored at key:', normalizedUsername, 'value:', passwords[normalizedUsername]);
+    
     this.savePasswords(passwords);
 
     const updatedUsers = [...users, newUser];
