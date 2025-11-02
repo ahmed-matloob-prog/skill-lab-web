@@ -107,19 +107,27 @@ const Admin: React.FC = () => {
 
   useEffect(() => {
     if (user?.role === 'admin') {
+      console.log('Admin: Loading users and setting up subscription');
       loadUsers();
       
       // Subscribe to real-time user updates from Firebase
       if (FirebaseUserService.isConfigured()) {
+        console.log('Admin: Setting up Firebase real-time subscription');
         const unsubscribe = FirebaseUserService.subscribeToUsers((updatedUsers) => {
+          console.log('Admin: Firebase users updated in real-time:', updatedUsers.length, 'users:', updatedUsers.map(u => u.username));
           // loadUsers will merge Firebase users with production users
-          loadUsers();
-          console.log('Admin: Users updated in real-time from Firebase');
+          // Force reload to get merged list
+          loadUsers().then(() => {
+            console.log('Admin: Users list refreshed after Firebase update');
+          });
         });
         
         return () => {
+          console.log('Admin: Cleaning up Firebase subscription');
           unsubscribe();
         };
+      } else {
+        console.log('Admin: Firebase not configured, using localStorage only');
       }
     }
   }, [user]);
@@ -127,10 +135,12 @@ const Admin: React.FC = () => {
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
+      console.log('Admin: Loading users from AuthService...');
       const usersData = await AuthService.getAllUsers();
+      console.log('Admin: Loaded', usersData.length, 'users:', usersData.map(u => u.username));
       setUsers(usersData);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('Admin: Error loading users:', error);
     } finally {
       setLoadingUsers(false);
     }

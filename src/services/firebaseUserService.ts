@@ -12,21 +12,26 @@ class FirebaseUserService {
   // Get all users from Firebase
   async getAllUsers(): Promise<User[]> {
     if (!db || !isConfigured) {
+      console.log('Firebase: Not configured, returning empty array');
       return [];
     }
     
     try {
+      console.log('Firebase: Fetching all users from Firestore...');
       const usersSnapshot = await getDocs(collection(db, this.usersCollection));
       const users: User[] = [];
       
       usersSnapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data();
-        users.push({
+        const user = {
           id: docSnapshot.id,
           ...data,
-        } as User);
+          username: data.usernameOriginal || data.username, // Use original casing for display
+        } as User;
+        users.push(user);
       });
 
+      console.log('Firebase: Retrieved', users.length, 'users from Firestore:', users.map(u => u.username));
       return users;
     } catch (error) {
       console.error('Firebase: Error getting users:', error);
@@ -98,8 +103,9 @@ class FirebaseUserService {
         updatedAt: new Date().toISOString(),
       };
 
+      console.log('Firebase: Creating user in Firestore:', userId, user.username);
       await setDoc(userRef, userData);
-      console.log('Firebase: User created:', userId);
+      console.log('Firebase: User created successfully in Firestore:', userId, user.username);
       return userId;
     } catch (error) {
       console.error('Firebase: Error creating user:', error);
@@ -169,12 +175,14 @@ class FirebaseUserService {
       const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
         const users: User[] = [];
         snapshot.forEach((docSnapshot) => {
+          const data = docSnapshot.data();
           users.push({
             id: docSnapshot.id,
-            ...docSnapshot.data(),
+            ...data,
+            username: data.usernameOriginal || data.username, // Use original casing for display
           } as User);
         });
-        console.log('Firebase: Users updated in real-time:', users.length);
+        console.log('Firebase: Users updated in real-time:', users.length, 'users:', users.map(u => u.username));
         callback(users);
       }, (error) => {
         console.error('Firebase: Error in users subscription:', error);

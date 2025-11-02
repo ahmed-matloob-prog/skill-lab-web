@@ -118,9 +118,17 @@ class AuthService {
     if (FirebasePasswordService.isConfigured()) {
       try {
         // Get passwords from Firebase for each user
+        // Only fetch for non-production users (production users use hardcoded passwords)
         const allUsers = await this.getUsers();
+        const productionUsernames = productionUsers.map(u => u.username.toLowerCase());
+        
         for (const user of allUsers) {
           const normalizedUsername = this.normalizeUsername(user.username);
+          // Skip production users - they use hardcoded passwords
+          if (productionUsernames.includes(normalizedUsername)) {
+            continue;
+          }
+          
           const firebasePassword = await FirebasePasswordService.getPassword(normalizedUsername);
           if (firebasePassword) {
             passwords[normalizedUsername] = firebasePassword;
@@ -130,6 +138,7 @@ class AuthService {
             }
           }
         }
+        console.log('Firebase: Merged passwords from Firebase with localStorage');
       } catch (error) {
         console.error('Firebase: Error getting passwords, using localStorage only:', error);
       }
@@ -198,6 +207,8 @@ class AuthService {
           !productionUsernames.includes(u.username.toLowerCase())
         );
         
+        console.log('AuthService: Saving', usersToSave.length, 'users to Firebase (excluding', productionUsernames.length, 'production users)');
+        
         // Get existing Firebase users to compare
         const existingFirebaseUsers = await FirebaseUserService.getAllUsers();
         const existingIds = new Set(existingFirebaseUsers.map(u => u.id));
@@ -205,8 +216,10 @@ class AuthService {
         // Save/update each user in Firebase
         for (const user of usersToSave) {
           if (existingIds.has(user.id)) {
+            console.log('AuthService: Updating existing Firebase user:', user.username);
             await FirebaseUserService.updateUser(user.id, user);
           } else {
+            console.log('AuthService: Creating new Firebase user:', user.username);
             await FirebaseUserService.createUser(user);
           }
         }
@@ -214,17 +227,19 @@ class AuthService {
         // Delete users that are in Firebase but not in the new list
         for (const fbUser of existingFirebaseUsers) {
           if (!users.find(u => u.id === fbUser.id)) {
+            console.log('AuthService: Deleting Firebase user:', fbUser.username);
             await FirebaseUserService.deleteUser(fbUser.id);
           }
         }
         
-        console.log('Firebase: Users saved successfully');
+        console.log('AuthService: All users saved successfully to Firebase');
       } catch (error) {
         console.error('Firebase: Error saving users, falling back to localStorage:', error);
         // Fallback to localStorage
         localStorage.setItem(this.usersKey, JSON.stringify(users));
       }
     } else {
+      console.log('AuthService: Firebase not configured, saving to localStorage only');
       // Use localStorage if Firebase not configured
       localStorage.setItem(this.usersKey, JSON.stringify(users));
     }
@@ -402,6 +417,8 @@ class AuthService {
       createdAt: new Date().toISOString(),
     };
 
+    console.log('AuthService: Creating new user:', newUser.username, 'ID:', newUser.id);
+
     // Add password to stored passwords (in a real app, this would be hashed)
     // Store password with normalized username as key for consistent lookup
     const passwords = await this.getPasswords();
@@ -417,8 +434,12 @@ class AuthService {
     
     await this.savePasswords(passwords);
 
+    // Save user to Firebase and localStorage
     const updatedUsers = [...users, newUser];
+    console.log('AuthService: Saving user to storage. Total users:', updatedUsers.length);
     await this.saveUsers(updatedUsers);
+    
+    console.log('AuthService: User created and saved successfully:', newUser.username);
 
     return newUser;
   }
