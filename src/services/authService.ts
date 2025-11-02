@@ -1,4 +1,6 @@
 import { User, LoginCredentials } from '../types';
+import FirebaseUserService from './firebaseUserService';
+import FirebasePasswordService from './firebasePasswordService';
 
 // Production users data - Admin user and demo trainer accounts
 const productionUsers: User[] = [
@@ -107,22 +109,125 @@ class AuthService {
     }
   }
 
-  private getPasswords(): { [username: string]: string } {
-    const passwords = localStorage.getItem(this.passwordsKey);
-    return passwords ? JSON.parse(passwords) : defaultPasswords;
+  private async getPasswords(): Promise<{ [username: string]: string }> {
+    // Start with localStorage passwords (for default users and backwards compatibility)
+    const localPasswords = localStorage.getItem(this.passwordsKey);
+    const passwords = localPasswords ? JSON.parse(localPasswords) : { ...defaultPasswords };
+    
+    // Merge with Firebase passwords if configured
+    if (FirebasePasswordService.isConfigured()) {
+      try {
+        // Get passwords from Firebase for each user
+        const allUsers = await this.getUsers();
+        for (const user of allUsers) {
+          const normalizedUsername = this.normalizeUsername(user.username);
+          const firebasePassword = await FirebasePasswordService.getPassword(normalizedUsername);
+          if (firebasePassword) {
+            passwords[normalizedUsername] = firebasePassword;
+            // Also store with original username if different
+            if (normalizedUsername !== user.username) {
+              passwords[user.username] = firebasePassword;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Firebase: Error getting passwords, using localStorage only:', error);
+      }
+    }
+    
+    return passwords;
   }
 
-  private savePasswords(passwords: { [username: string]: string }): void {
+  private async savePasswords(passwords: { [username: string]: string }): Promise<void> {
+    // Save to localStorage (for default users and backwards compatibility)
     localStorage.setItem(this.passwordsKey, JSON.stringify(passwords));
+    
+    // Also save to Firebase if configured (for new users)
+    if (FirebasePasswordService.isConfigured()) {
+      try {
+        // Save passwords for non-production users to Firebase
+        const productionUsernames = productionUsers.map(u => u.username.toLowerCase());
+        
+        for (const [username, password] of Object.entries(passwords)) {
+          const normalizedUsername = username.toLowerCase().trim();
+          // Don't save production user passwords to Firebase (they're hardcoded)
+          if (!productionUsernames.includes(normalizedUsername)) {
+            await FirebasePasswordService.savePassword(normalizedUsername, password);
+          }
+        }
+      } catch (error) {
+        console.error('Firebase: Error saving passwords, using localStorage only:', error);
+      }
+    }
   }
 
-  private getUsers(): User[] {
+  private async getUsers(): Promise<User[]> {
+    // Try Firebase first if configured
+    if (FirebaseUserService.isConfigured()) {
+      try {
+        const firebaseUsers = await FirebaseUserService.getAllUsers();
+        // Merge with production users (default admin and trainers)
+        const allUsers = [...productionUsers];
+        
+        // Add Firebase users, avoiding duplicates
+        firebaseUsers.forEach(fbUser => {
+          if (!allUsers.find(u => u.username.toLowerCase() === fbUser.username.toLowerCase())) {
+            allUsers.push(fbUser);
+          }
+        });
+        
+        return allUsers;
+      } catch (error) {
+        console.error('Firebase: Error getting users, falling back to localStorage:', error);
+        // Fallback to localStorage
+      }
+    }
+    
+    // Fallback to localStorage
     const users = localStorage.getItem(this.usersKey);
     return users ? JSON.parse(users) : productionUsers;
   }
 
-  private saveUsers(users: User[]): void {
-    localStorage.setItem(this.usersKey, JSON.stringify(users));
+  private async saveUsers(users: User[]): Promise<void> {
+    // Save to Firebase if configured
+    if (FirebaseUserService.isConfigured()) {
+      try {
+        // Filter out production users (they're hardcoded)
+        const productionUsernames = productionUsers.map(u => u.username.toLowerCase());
+        const usersToSave = users.filter(u => 
+          !productionUsernames.includes(u.username.toLowerCase())
+        );
+        
+        // Get existing Firebase users to compare
+        const existingFirebaseUsers = await FirebaseUserService.getAllUsers();
+        const existingIds = new Set(existingFirebaseUsers.map(u => u.id));
+        
+        // Save/update each user in Firebase
+        for (const user of usersToSave) {
+          if (existingIds.has(user.id)) {
+            await FirebaseUserService.updateUser(user.id, user);
+          } else {
+            await FirebaseUserService.createUser(user);
+          }
+        }
+        
+        // Delete users that are in Firebase but not in the new list
+        for (const fbUser of existingFirebaseUsers) {
+          if (!users.find(u => u.id === fbUser.id)) {
+            await FirebaseUserService.deleteUser(fbUser.id);
+          }
+        }
+        
+        console.log('Firebase: Users saved successfully');
+      } catch (error) {
+        console.error('Firebase: Error saving users, falling back to localStorage:', error);
+        // Fallback to localStorage
+        localStorage.setItem(this.usersKey, JSON.stringify(users));
+      }
+    } else {
+      // Use localStorage if Firebase not configured
+      localStorage.setItem(this.usersKey, JSON.stringify(users));
+    }
   }
 
   // Normalize username for consistent lookup (lowercase + trim)
@@ -161,7 +266,7 @@ class AuthService {
     console.log('AuthService: Login attempt for username:', username, 'normalized:', normalizedUsername);
     
     // Find user by username (case-insensitive)
-    const users = this.getUsers();
+    const users = await this.getUsers();
     console.log('AuthService: Total users found:', users.length);
     const user = users.find(u => this.normalizeUsername(u.username) === normalizedUsername && u.isActive);
     
@@ -173,7 +278,7 @@ class AuthService {
     console.log('AuthService: User found:', user.username, 'role:', user.role);
 
     // Check password (in a real app, this would be hashed)
-    const passwords = this.getPasswords();
+    const passwords = await this.getPasswords();
     const correctPassword = this.findPasswordByUsername(username, passwords);
     console.log('AuthService: Password lookup result:', correctPassword ? 'Found' : 'Not found');
     console.log('AuthService: Input password length:', password.length, 'Correct password length:', correctPassword?.length);
@@ -196,7 +301,7 @@ class AuthService {
 
     // Update user in storage
     const updatedUsers = users.map(u => u.id === user.id ? updatedUser : u);
-    this.saveUsers(updatedUsers);
+    await this.saveUsers(updatedUsers);
 
     // Set current user
     this.currentUser = updatedUser;
@@ -230,7 +335,7 @@ class AuthService {
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
-    const users = this.getUsers();
+    const users = await this.getUsers();
     const user = users.find(u => u.id === userId);
     
     if (!user) {
@@ -238,7 +343,7 @@ class AuthService {
     }
 
     // Check old password (case-insensitive lookup)
-    const passwords = this.getPasswords();
+    const passwords = await this.getPasswords();
     const correctPassword = this.findPasswordByUsername(user.username, passwords);
     if (!correctPassword || oldPassword !== correctPassword) {
       throw new Error('Current password is incorrect');
@@ -252,7 +357,7 @@ class AuthService {
     if (normalizedUsername !== user.username) {
       passwords[user.username] = newPassword;
     }
-    this.savePasswords(passwords);
+    await this.savePasswords(passwords);
 
     // Update user
     const updatedUser = {
@@ -271,14 +376,14 @@ class AuthService {
   }
 
   async getAllUsers(): Promise<User[]> {
-    return this.getUsers();
+    return await this.getUsers();
   }
 
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'lastLogin'>, password: string): Promise<User> {
     console.log('AuthService: createUser called with username:', userData.username, 'password length:', password.length);
     console.log('AuthService: createUser received password:', password);
     
-    const users = this.getUsers();
+    const users = await this.getUsers();
     const normalizedUsername = this.normalizeUsername(userData.username);
     
     // Check if username already exists (case-insensitive)
@@ -299,7 +404,7 @@ class AuthService {
 
     // Add password to stored passwords (in a real app, this would be hashed)
     // Store password with normalized username as key for consistent lookup
-    const passwords = this.getPasswords();
+    const passwords = await this.getPasswords();
     passwords[normalizedUsername] = password;
     // Also store with original username for backwards compatibility
     if (normalizedUsername !== userData.username) {
@@ -310,16 +415,16 @@ class AuthService {
     console.log('AuthService: Password being saved:', password);
     console.log('AuthService: Password stored at key:', normalizedUsername, 'value:', passwords[normalizedUsername]);
     
-    this.savePasswords(passwords);
+    await this.savePasswords(passwords);
 
     const updatedUsers = [...users, newUser];
-    this.saveUsers(updatedUsers);
+    await this.saveUsers(updatedUsers);
 
     return newUser;
   }
 
   async updateUser(userId: string, updates: Partial<User>): Promise<User> {
-    const users = this.getUsers();
+    const users = await this.getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
     
     if (userIndex === -1) {
@@ -333,7 +438,7 @@ class AuthService {
     };
 
     const updatedUsers = users.map(u => u.id === userId ? updatedUser : u);
-    this.saveUsers(updatedUsers);
+    await this.saveUsers(updatedUsers);
 
     // Update current user if it's the same user
     if (this.currentUser && this.currentUser.id === userId) {
@@ -345,7 +450,7 @@ class AuthService {
   }
 
   async deleteUser(userId: string): Promise<void> {
-    const users = this.getUsers();
+    const users = await this.getUsers();
     const user = users.find(u => u.id === userId);
     
     if (!user) {
@@ -357,12 +462,22 @@ class AuthService {
       throw new Error('Cannot delete the admin user');
     }
 
+    // Delete from Firebase if configured
+    if (FirebaseUserService.isConfigured() && !productionUsers.find(u => u.id === userId)) {
+      try {
+        await FirebaseUserService.deleteUser(userId);
+        console.log('Firebase: User deleted:', userId);
+      } catch (error) {
+        console.error('Firebase: Error deleting user, falling back to localStorage:', error);
+      }
+    }
+
     // Remove user from storage
     const updatedUsers = users.filter(u => u.id !== userId);
-    this.saveUsers(updatedUsers);
+    await this.saveUsers(updatedUsers);
 
     // Remove password from stored passwords (remove both normalized and original if different)
-    const passwords = this.getPasswords();
+    const passwords = await this.getPasswords();
     const normalizedUsername = this.normalizeUsername(user.username);
     delete passwords[normalizedUsername];
     if (normalizedUsername !== user.username) {
@@ -374,7 +489,16 @@ class AuthService {
         delete passwords[key];
       }
     });
-    this.savePasswords(passwords);
+    await this.savePasswords(passwords);
+    
+    // Also delete from Firebase
+    if (FirebasePasswordService.isConfigured()) {
+      try {
+        await FirebasePasswordService.deletePassword(user.username);
+      } catch (error) {
+        console.error('Firebase: Error deleting password:', error);
+      }
+    }
 
     // If the deleted user is the current user, log them out
     if (this.currentUser && this.currentUser.id === userId) {

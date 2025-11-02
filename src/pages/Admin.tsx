@@ -37,11 +37,15 @@ import {
   School,
   Assessment,
   Quiz,
+  Download,
+  Upload,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Group } from '../types';
 import AuthService from '../services/authService';
+import FirebaseUserService from '../services/firebaseUserService';
+import FirebasePasswordService from '../services/firebasePasswordService';
 import AdminReport from './AdminReport';
 import TrainerReports from './TrainerReports';
 
@@ -104,6 +108,19 @@ const Admin: React.FC = () => {
   useEffect(() => {
     if (user?.role === 'admin') {
       loadUsers();
+      
+      // Subscribe to real-time user updates from Firebase
+      if (FirebaseUserService.isConfigured()) {
+        const unsubscribe = FirebaseUserService.subscribeToUsers((updatedUsers) => {
+          // loadUsers will merge Firebase users with production users
+          loadUsers();
+          console.log('Admin: Users updated in real-time from Firebase');
+        });
+        
+        return () => {
+          unsubscribe();
+        };
+      }
     }
   }, [user]);
 
@@ -179,15 +196,25 @@ const Admin: React.FC = () => {
         // Update password if provided
         if (userForm.password.trim()) {
           console.log('Admin: Updating password for user:', editingUser.username);
-          // Get current password to pass as oldPassword (for admin override, we'll need a different method)
-          // For now, we'll directly update the password in the service
-          const passwords = JSON.parse(localStorage.getItem('userPasswords') || '{}');
-          const normalizedUsername = editingUser.username.toLowerCase().trim();
-          passwords[normalizedUsername] = userForm.password.trim();
-          if (normalizedUsername !== editingUser.username) {
-            passwords[editingUser.username] = userForm.password.trim();
+          // Update password through AuthService to sync with Firebase
+          try {
+            await AuthService.changePassword(editingUser.id, userForm.password.trim(), userForm.password.trim());
+          } catch (error) {
+            // If old password doesn't match, directly save new password
+            // This allows admins to reset passwords
+            const passwords = JSON.parse(localStorage.getItem('userPasswords') || '{}');
+            const normalizedUsername = editingUser.username.toLowerCase().trim();
+            passwords[normalizedUsername] = userForm.password.trim();
+            if (normalizedUsername !== editingUser.username) {
+              passwords[editingUser.username] = userForm.password.trim();
+            }
+            localStorage.setItem('userPasswords', JSON.stringify(passwords));
+            
+            // Also save to Firebase if configured
+            if (FirebasePasswordService.isConfigured()) {
+              await FirebasePasswordService.savePassword(editingUser.username, userForm.password.trim());
+            }
           }
-          localStorage.setItem('userPasswords', JSON.stringify(passwords));
           console.log('Admin: Password updated successfully');
         }
       } else {
@@ -207,6 +234,115 @@ const Admin: React.FC = () => {
       loadUsers();
     } catch (error) {
       setError('Failed to save user');
+    }
+  };
+
+  const handleExportUsers = () => {
+    try {
+      const usersData = users.map(u => ({
+        username: u.username,
+        email: u.email,
+        role: u.role,
+        assignedGroups: u.assignedGroups || [],
+        assignedYears: u.assignedYears || [],
+        isActive: u.isActive,
+      }));
+      
+      const passwords = JSON.parse(localStorage.getItem('userPasswords') || '{}');
+      const usersWithPasswords = usersData.map(user => ({
+        ...user,
+        password: passwords[user.username] || passwords[user.username.toLowerCase()] || '',
+      }));
+      
+      const dataStr = JSON.stringify(usersWithPasswords, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `users_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setError(null);
+    } catch (error) {
+      setError('Failed to export users');
+      console.error('Export error:', error);
+    }
+  };
+
+  const handleImportUsers = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      setError('Please select a JSON file');
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const importedUsers = JSON.parse(text);
+
+      if (!Array.isArray(importedUsers)) {
+        setError('Invalid file format. Expected an array of users.');
+        return;
+      }
+
+      let importedCount = 0;
+      let skippedCount = 0;
+      const errors: string[] = [];
+
+      for (const userData of importedUsers) {
+        try {
+          // Check if user already exists
+          const existingUsers = await AuthService.getAllUsers();
+          const normalizedUsername = userData.username.toLowerCase().trim();
+          const exists = existingUsers.find(u => u.username.toLowerCase().trim() === normalizedUsername);
+
+          if (exists) {
+            skippedCount++;
+            errors.push(`Skipped "${userData.username}" - already exists`);
+            continue;
+          }
+
+          // Create user
+          if (!userData.password || !userData.password.trim()) {
+            errors.push(`Skipped "${userData.username}" - no password provided`);
+            skippedCount++;
+            continue;
+          }
+
+          await AuthService.createUser({
+            username: userData.username,
+            email: userData.email,
+            role: userData.role || 'trainer',
+            assignedGroups: userData.assignedGroups || [],
+            assignedYears: userData.assignedYears || [],
+            isActive: userData.isActive !== false,
+          }, userData.password);
+
+          importedCount++;
+        } catch (error) {
+          skippedCount++;
+          errors.push(`Error importing "${userData.username}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      await loadUsers();
+
+      if (errors.length > 0) {
+        setError(`${importedCount} imported, ${skippedCount} skipped. Errors: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`);
+      } else {
+        setError(null);
+      }
+
+      // Reset file input
+      event.target.value = '';
+    } catch (error) {
+      setError('Failed to import users. Invalid file format.');
+      console.error('Import error:', error);
     }
   };
 
@@ -395,13 +531,38 @@ const Admin: React.FC = () => {
           <Typography variant="h6">
             User Management ({users.length})
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => handleOpenUserDialog()}
-          >
-            Add User
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportUsers}
+            >
+              Export Users
+            </Button>
+            <input
+              accept=".json"
+              style={{ display: 'none' }}
+              id="import-users-file"
+              type="file"
+              onChange={handleImportUsers}
+            />
+            <label htmlFor="import-users-file">
+              <Button
+                variant="outlined"
+                component="span"
+                startIcon={<Upload />}
+              >
+                Import Users
+              </Button>
+            </label>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => handleOpenUserDialog()}
+            >
+              Add User
+            </Button>
+          </Box>
         </Box>
 
         {loadingUsers ? (
