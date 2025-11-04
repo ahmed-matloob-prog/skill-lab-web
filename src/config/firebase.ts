@@ -5,6 +5,7 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { logger } from '../utils/logger';
 
 // Your Firebase configuration
 // You'll get this from Firebase Console > Project Settings > General > Your apps > Web app
@@ -32,12 +33,12 @@ if (isConfigured) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    console.log('Firebase: Initialized successfully');
+    logger.log('Firebase: Initialized successfully');
   } catch (error) {
-    console.error('Firebase: Initialization error:', error);
+    logger.error('Firebase: Initialization error:', error);
   }
 } else {
-  console.log('Firebase: Not configured. Using localStorage fallback.');
+  logger.log('Firebase: Not configured. Using localStorage fallback.');
 }
 
 export { auth, db, isConfigured };

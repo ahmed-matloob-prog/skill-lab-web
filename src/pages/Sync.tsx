@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 
 const SyncPage: React.FC = () => {
   const { students, groups, attendance, assessments, getUnsyncedRecords, markAttendanceSynced, markAssessmentsSynced } = useDatabase();
@@ -69,7 +70,7 @@ const SyncPage: React.FC = () => {
         assessments: unsynced.assessments.length,
       });
     } catch (error) {
-      console.error('Error loading unsynced data:', error);
+      logger.error('Error loading unsynced data:', error);
     }
   };
 
@@ -109,7 +110,7 @@ const SyncPage: React.FC = () => {
       setSyncStatus('success');
       await loadUnsyncedData();
     } catch (error) {
-      console.error('Sync error:', error);
+      logger.error('Sync error:', error);
       setSyncStatus('error');
     } finally {
       setSyncing(false);

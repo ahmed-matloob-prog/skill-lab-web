@@ -32,12 +32,14 @@ import {
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { Student, Group } from '../types';
-import { 
-  importStudentsFromExcel, 
-  downloadStudentTemplate 
+import {
+  importStudentsFromExcel,
+  downloadStudentTemplate
 } from '../utils/excelUtils';
 import DatabaseService from '../services/databaseService';
+import { sanitizeString, validateName, validateStudentId, validateEmail } from '../utils/validator';
 
 const Students: React.FC = () => {
   const { students, groups, addStudent, updateStudent, deleteStudent, refreshStudents, forceRefresh, loading } = useDatabase();
@@ -69,6 +71,7 @@ const Students: React.FC = () => {
   } | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [loadingImport, setLoadingImport] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
   // Force refresh when trigger changes
   useEffect(() => {
@@ -98,7 +101,7 @@ const Students: React.FC = () => {
     groups.filter(group => user?.assignedGroups?.includes(group.id));
 
   // Debug: Log students data
-  console.log('Students data:', {
+  logger.log('Students data:', {
     totalStudents: students.length,
     filteredStudents: filteredStudents.length,
     selectedYear,
@@ -107,7 +110,7 @@ const Students: React.FC = () => {
   });
 
   // Debug: Log groups data
-  console.log('Groups data:', {
+  logger.log('Groups data:', {
     totalGroups: groups.length,
     accessibleGroups: accessibleGroups.length,
     userRole: user?.role,
@@ -167,6 +170,7 @@ const Students: React.FC = () => {
       });
     }
     setError(null);
+    setValidationErrors({});
     setOpenDialog(true);
   };
 
@@ -176,23 +180,46 @@ const Students: React.FC = () => {
     setError(null);
   };
 
-  const handleSave = async () => {
+  const validateStudentForm = (): boolean => {
+    const errors: { [key: string]: string } = {};
+
+    // Validate student name
     if (!formData.name.trim()) {
-      setError('Student name is required');
-      return;
+      errors.name = 'Student name is required';
+    } else if (!validateName(formData.name.trim())) {
+      errors.name = 'Student name must be 2-100 characters and contain only letters and spaces';
     }
 
+    // Validate student ID (if provided)
+    if (formData.studentId.trim() && !validateStudentId(formData.studentId.trim())) {
+      errors.studentId = 'Student ID must contain only alphanumeric characters and hyphens';
+    }
+
+    // Validate email (if provided)
+    if (formData.email.trim() && !validateEmail(formData.email.trim())) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Validate group selection
     if (!formData.groupId) {
-      setError('Please select a group');
+      errors.groupId = 'Please select a group';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validateStudentForm()) {
       return;
     }
 
     try {
       const studentData = {
-        name: formData.name.trim(),
+        name: sanitizeString(formData.name.trim()),
         studentId: formData.studentId.trim() || `ST${Date.now()}`,
-        email: formData.email.trim() || undefined,
-        phone: formData.phone.trim() || undefined,
+        email: formData.email.trim() ? sanitizeString(formData.email.trim()) : undefined,
+        phone: formData.phone.trim() ? sanitizeString(formData.phone.trim()) : undefined,
         year: formData.year,
         groupId: formData.groupId,
         unit: formData.unit.trim() || undefined,
@@ -261,25 +288,25 @@ const Students: React.FC = () => {
       });
       
       // Debug: Log the results before refresh
-      console.log('Import completed:', {
+      logger.log('Import completed:', {
         imported: importedStudents.length,
         added: result.added,
         skipped: result.skipped,
         errors: allErrors.length
       });
-      
+
       // Check localStorage before refresh
       const studentsInStorageBefore = JSON.parse(localStorage.getItem('students') || '[]');
-      console.log('Students in localStorage before refresh:', studentsInStorageBefore.length);
-      console.log('Students in React state before refresh:', students.length);
-      
+      logger.log('Students in localStorage before refresh:', studentsInStorageBefore.length);
+      logger.log('Students in React state before refresh:', students.length);
+
       // Force refresh the students data to update the UI
       await forceRefresh();
-      
+
       // Check localStorage and React state after refresh
       const studentsInStorageAfter = JSON.parse(localStorage.getItem('students') || '[]');
-      console.log('Students in localStorage after refresh:', studentsInStorageAfter.length);
-      console.log('Students in React state after refresh:', students.length);
+      logger.log('Students in localStorage after refresh:', studentsInStorageAfter.length);
+      logger.log('Students in React state after refresh:', students.length);
       
       // Force a re-render by updating a dummy state
       setImportResults(prev => prev ? { ...prev, timestamp: Date.now() } : null);
@@ -539,14 +566,21 @@ const Students: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          
+
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Full Name *"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  if (validationErrors.name) {
+                    setValidationErrors({ ...validationErrors, name: '' });
+                  }
+                }}
+                error={!!validationErrors.name}
+                helperText={validationErrors.name}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -554,8 +588,14 @@ const Students: React.FC = () => {
                 fullWidth
                 label="Student ID"
                 value={formData.studentId}
-                onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                helperText="Auto-generated if empty"
+                onChange={(e) => {
+                  setFormData({ ...formData, studentId: e.target.value });
+                  if (validationErrors.studentId) {
+                    setValidationErrors({ ...validationErrors, studentId: '' });
+                  }
+                }}
+                error={!!validationErrors.studentId}
+                helperText={validationErrors.studentId || 'Auto-generated if empty'}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -594,7 +634,14 @@ const Students: React.FC = () => {
                 label="Email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  if (validationErrors.email) {
+                    setValidationErrors({ ...validationErrors, email: '' });
+                  }
+                }}
+                error={!!validationErrors.email}
+                helperText={validationErrors.email}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -606,12 +653,17 @@ const Students: React.FC = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!validationErrors.groupId}>
                 <InputLabel>Group *</InputLabel>
                 <Select
                   value={formData.groupId}
                   label="Group *"
-                  onChange={(e) => setFormData({ ...formData, groupId: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, groupId: e.target.value });
+                    if (validationErrors.groupId) {
+                      setValidationErrors({ ...validationErrors, groupId: '' });
+                    }
+                  }}
                 >
                   {accessibleGroups.map(group => (
                     <MenuItem key={group.id} value={group.id}>
@@ -622,6 +674,11 @@ const Students: React.FC = () => {
                     <MenuItem disabled>No groups available</MenuItem>
                   )}
                 </Select>
+                {validationErrors.groupId && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {validationErrors.groupId}
+                  </Typography>
+                )}
               </FormControl>
             </Grid>
           </Grid>

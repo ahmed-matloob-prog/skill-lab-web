@@ -13,22 +13,48 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff, Login as LoginIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { sanitizeString, validateUsername } from '../utils/validator';
 
 const LoginForm: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuth();
-  
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{ username?: string; password?: string }>({});
+
+  const validateForm = (): boolean => {
+    const errors: { username?: string; password?: string } = {};
+
+    // Validate username
+    if (!username.trim()) {
+      errors.username = 'Username is required';
+    } else if (!validateUsername(username.trim())) {
+      errors.username = 'Username must be 3-50 characters (alphanumeric and underscores only)';
+    }
+
+    // Validate password
+    if (!password.trim()) {
+      errors.password = 'Password is required';
+    } else if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim() || isLoading) {
+
+    if (!validateForm() || isLoading) {
       return;
     }
 
     try {
-      await login({ username: username.trim(), password });
+      // Sanitize username before submitting
+      const sanitizedUsername = sanitizeString(username.trim());
+      await login({ username: sanitizedUsername, password });
     } catch (error) {
       // Error is handled by the auth context
     }
@@ -36,11 +62,19 @@ const LoginForm: React.FC = () => {
 
   const handleInputChange = (field: 'username' | 'password', value: string) => {
     if (error) clearError();
-    
+
     if (field === 'username') {
       setUsername(value);
+      // Clear validation error for username when user starts typing
+      if (validationErrors.username) {
+        setValidationErrors({ ...validationErrors, username: undefined });
+      }
     } else {
       setPassword(value);
+      // Clear validation error for password when user starts typing
+      if (validationErrors.password) {
+        setValidationErrors({ ...validationErrors, password: undefined });
+      }
     }
   };
 
@@ -82,6 +116,8 @@ const LoginForm: React.FC = () => {
               margin="normal"
               disabled={isLoading}
               autoComplete="username"
+              error={!!validationErrors.username}
+              helperText={validationErrors.username}
             />
 
             <TextField
@@ -93,6 +129,8 @@ const LoginForm: React.FC = () => {
               margin="normal"
               disabled={isLoading}
               autoComplete="current-password"
+              error={!!validationErrors.password}
+              helperText={validationErrors.password}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -112,7 +150,7 @@ const LoginForm: React.FC = () => {
               fullWidth
               variant="contained"
               size="large"
-              disabled={isLoading || !username.trim() || !password.trim()}
+              disabled={isLoading || !username.trim() || !password.trim() || Object.keys(validationErrors).length > 0}
               sx={{ mt: 3, mb: 2 }}
             >
               {isLoading ? <CircularProgress size={24} /> : 'Sign In'}

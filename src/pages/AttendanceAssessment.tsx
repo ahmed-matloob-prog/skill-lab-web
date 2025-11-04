@@ -47,6 +47,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
+import { logger } from '../utils/logger';
 import { Student, AttendanceRecord, AssessmentRecord } from '../types';
 import { exportAttendanceToExcel, exportAssessmentsToExcel } from '../utils/excelUtils';
 
@@ -191,7 +192,7 @@ const AttendanceAssessment: React.FC = () => {
         setAttendanceRecords(prev => [...prev, { ...newRecord, id: `temp-${Date.now()}`, timestamp: new Date().toISOString() }]);
       }
     } catch (error) {
-      console.error('Error updating attendance:', error);
+      logger.error('Error updating attendance:', error);
     }
   };
 
@@ -217,7 +218,7 @@ const AttendanceAssessment: React.FC = () => {
       
       setAttendanceRecords(filteredRecords);
     } catch (error) {
-      console.error('Error loading attendance:', error);
+      logger.error('Error loading attendance:', error);
     } finally {
       setLoadingAttendance(false);
     }
@@ -245,7 +246,7 @@ const AttendanceAssessment: React.FC = () => {
         
         setSavedAssessments(filteredAssessments);
       } catch (error) {
-        console.error('Error loading saved assessments:', error);
+        logger.error('Error loading saved assessments:', error);
       }
     } else {
       setSavedAssessments([]);

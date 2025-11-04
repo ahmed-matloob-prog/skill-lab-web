@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AuthService from '../services/authService';
 import { User, LoginCredentials, AuthState } from '../types';
+import { logger } from '../utils/logger';
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
@@ -62,22 +63,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (credentials: LoginCredentials) => {
     try {
-      console.log('AuthContext: Starting login for:', credentials.username);
+      logger.log('AuthContext: Starting login for:', credentials.username);
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
-      
+
       const user = await AuthService.login(credentials);
-      
-      console.log('AuthContext: Login successful, setting auth state. User:', user);
+
+      logger.log('AuthContext: Login successful, setting auth state. User:', user);
       setAuthState({
         user,
         isAuthenticated: true,
         isLoading: false,
         error: null,
       });
-      
-      console.log('AuthContext: Auth state updated, should redirect to dashboard');
+
+      logger.log('AuthContext: Auth state updated, should redirect to dashboard');
     } catch (error) {
-      console.error('AuthContext: Login error:', error);
+      logger.error('AuthContext: Login error:', error);
       setAuthState(prev => ({
         ...prev,
         isLoading: false,

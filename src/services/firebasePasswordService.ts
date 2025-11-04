@@ -4,6 +4,7 @@
 
 import { collection, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, isConfigured } from '../config/firebase';
+import { logger } from '../utils/logger';
 
 class FirebasePasswordService {
   private passwordsCollection = 'passwords';
@@ -17,16 +18,17 @@ class FirebasePasswordService {
     try {
       const normalizedUsername = username.toLowerCase().trim();
       const passwordDoc = await getDoc(doc(db, this.passwordsCollection, normalizedUsername));
-      
+
+
       if (passwordDoc.exists()) {
         const password = passwordDoc.data().password;
-        console.log('Firebase: Password retrieved for:', normalizedUsername);
+        logger.log('Firebase: Password retrieved for:', normalizedUsername);
         return password;
       }
-      console.log('Firebase: No password found for:', normalizedUsername);
+      logger.log('Firebase: No password found for:', normalizedUsername);
       return null;
     } catch (error) {
-      console.error('Firebase: Error getting password:', error);
+      logger.error('Firebase: Error getting password:', error);
       return null;
     }
   }
@@ -44,7 +46,7 @@ class FirebasePasswordService {
       const passwords: { [username: string]: string } = {};
       return passwords;
     } catch (error) {
-      console.error('Firebase: Error getting all passwords:', error);
+      logger.error('Firebase: Error getting all passwords:', error);
       return {};
     }
   }
@@ -58,16 +60,16 @@ class FirebasePasswordService {
     try {
       const normalizedUsername = username.toLowerCase().trim();
       const passwordRef = doc(db, this.passwordsCollection, normalizedUsername);
-      
+
       await setDoc(passwordRef, {
         username: normalizedUsername,
         password: password,
         updatedAt: new Date().toISOString(),
       });
-      
-      console.log('Firebase: Password saved for:', normalizedUsername);
+
+      logger.log('Firebase: Password saved for:', normalizedUsername);
     } catch (error) {
-      console.error('Firebase: Error saving password:', error);
+      logger.error('Firebase: Error saving password:', error);
     }
   }
 
@@ -81,9 +83,9 @@ class FirebasePasswordService {
       const normalizedUsername = username.toLowerCase().trim();
       const passwordRef = doc(db, this.passwordsCollection, normalizedUsername);
       await deleteDoc(passwordRef);
-      console.log('Firebase: Password deleted for:', normalizedUsername);
+      logger.log('Firebase: Password deleted for:', normalizedUsername);
     } catch (error) {
-      console.error('Firebase: Error deleting password:', error);
+      logger.error('Firebase: Error deleting password:', error);
     }
   }
 

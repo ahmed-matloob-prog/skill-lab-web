@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import DatabaseService from '../services/databaseService';
 import { Student, Group, AttendanceRecord, AssessmentRecord } from '../types';
+import { logger } from '../utils/logger';
 
 interface DatabaseContextType {
   // Data
@@ -95,7 +96,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         refreshAssessments(),
       ]);
     } catch (error) {
-      console.error('Error initializing database:', error);
+      logger.error('Error initializing database:', error);
     } finally {
       setLoading(false);
     }
@@ -200,10 +201,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const refreshStudents = async (): Promise<void> => {
     try {
       const studentsData = await DatabaseService.getStudents();
-      console.log('DatabaseContext: Refreshing students, found:', studentsData.length);
+      logger.log('DatabaseContext: Refreshing students, found:', studentsData.length);
       setStudents(studentsData);
     } catch (error) {
-      console.error('DatabaseContext: Error refreshing students:', error);
+      logger.error('DatabaseContext: Error refreshing students:', error);
     }
   };
 
@@ -223,14 +224,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const forceRefresh = async (): Promise<void> => {
-    console.log('DatabaseContext: Force refreshing all data...');
+    logger.log('DatabaseContext: Force refreshing all data...');
     await Promise.all([
       refreshStudents(),
       refreshGroups(),
       refreshAttendance(),
       refreshAssessments(),
     ]);
-    console.log('DatabaseContext: Force refresh completed');
+    logger.log('DatabaseContext: Force refresh completed');
   };
 
   // Sync operations

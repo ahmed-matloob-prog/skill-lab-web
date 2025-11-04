@@ -42,12 +42,14 @@ import {
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { User, Group } from '../types';
 import AuthService from '../services/authService';
 import FirebaseUserService from '../services/firebaseUserService';
 import FirebasePasswordService from '../services/firebasePasswordService';
 import AdminReport from './AdminReport';
 import TrainerReports from './TrainerReports';
+import { sanitizeString, validateUsername, validateEmail, validatePassword } from '../utils/validator';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -104,30 +106,31 @@ const Admin: React.FC = () => {
   });
   
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
     if (user?.role === 'admin') {
-      console.log('Admin: Loading users and setting up subscription');
+      logger.log('Admin: Loading users and setting up subscription');
       loadUsers();
-      
+
       // Subscribe to real-time user updates from Firebase
       if (FirebaseUserService.isConfigured()) {
-        console.log('Admin: Setting up Firebase real-time subscription');
+        logger.log('Admin: Setting up Firebase real-time subscription');
         const unsubscribe = FirebaseUserService.subscribeToUsers((updatedUsers) => {
-          console.log('Admin: Firebase users updated in real-time:', updatedUsers.length, 'users:', updatedUsers.map(u => u.username));
+          logger.log('Admin: Firebase users updated in real-time:', updatedUsers.length, 'users:', updatedUsers.map(u => u.username));
           // loadUsers will merge Firebase users with production users
           // Force reload to get merged list
           loadUsers().then(() => {
-            console.log('Admin: Users list refreshed after Firebase update');
+            logger.log('Admin: Users list refreshed after Firebase update');
           });
         });
-        
+
         return () => {
-          console.log('Admin: Cleaning up Firebase subscription');
+          logger.log('Admin: Cleaning up Firebase subscription');
           unsubscribe();
         };
       } else {
-        console.log('Admin: Firebase not configured, using localStorage only');
+        logger.log('Admin: Firebase not configured, using localStorage only');
       }
     }
   }, [user]);
@@ -135,12 +138,12 @@ const Admin: React.FC = () => {
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
-      console.log('Admin: Loading users from AuthService...');
+      logger.log('Admin: Loading users from AuthService...');
       const usersData = await AuthService.getAllUsers();
-      console.log('Admin: Loaded', usersData.length, 'users:', usersData.map(u => u.username));
+      logger.log('Admin: Loaded', usersData.length, 'users:', usersData.map(u => u.username));
       setUsers(usersData);
     } catch (error) {
-      console.error('Admin: Error loading users:', error);
+      logger.error('Admin: Error loading users:', error);
     } finally {
       setLoadingUsers(false);
     }
@@ -174,6 +177,7 @@ const Admin: React.FC = () => {
       });
     }
     setError(null);
+    setValidationErrors({});
     setUserDialogOpen(true);
   };
 
@@ -181,31 +185,65 @@ const Admin: React.FC = () => {
     setUserDialogOpen(false);
     setEditingUser(null);
     setError(null);
+    setValidationErrors({});
+  };
+
+  const validateUserForm = (): boolean => {
+    const errors: { [key: string]: string } = {};
+
+    // Validate username
+    if (!userForm.username.trim()) {
+      errors.username = 'Username is required';
+    } else if (!validateUsername(userForm.username.trim())) {
+      errors.username = 'Username must be 3-50 characters (alphanumeric and underscores only)';
+    }
+
+    // Validate email
+    if (!userForm.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!validateEmail(userForm.email.trim())) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Validate password for new users
+    if (!editingUser) {
+      if (!userForm.password.trim()) {
+        errors.password = 'Password is required for new users';
+      } else {
+        const passwordValidation = validatePassword(userForm.password);
+        if (!passwordValidation.valid) {
+          errors.password = passwordValidation.message || 'Invalid password';
+        }
+      }
+    } else if (userForm.password.trim()) {
+      // For editing users, validate password only if provided
+      const passwordValidation = validatePassword(userForm.password);
+      if (!passwordValidation.valid) {
+        errors.password = passwordValidation.message || 'Invalid password';
+      }
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSaveUser = async () => {
-    if (!userForm.username.trim() || !userForm.email.trim()) {
-      setError('Username and email are required');
-      return;
-    }
-
-    if (!editingUser && !userForm.password.trim()) {
-      setError('Password is required for new users');
+    if (!validateUserForm()) {
       return;
     }
 
     try {
       if (editingUser) {
         await AuthService.updateUser(editingUser.id, {
-          username: userForm.username.trim(),
-          email: userForm.email.trim(),
+          username: sanitizeString(userForm.username.trim()),
+          email: sanitizeString(userForm.email.trim()),
           role: userForm.role,
           assignedGroups: userForm.assignedGroups,
           assignedYears: userForm.assignedYears,
         });
         // Update password if provided
         if (userForm.password.trim()) {
-          console.log('Admin: Updating password for user:', editingUser.username);
+          logger.log('Admin: Updating password for user:', editingUser.username);
           // Update password through AuthService to sync with Firebase
           try {
             await AuthService.changePassword(editingUser.id, userForm.password.trim(), userForm.password.trim());
@@ -219,20 +257,20 @@ const Admin: React.FC = () => {
               passwords[editingUser.username] = userForm.password.trim();
             }
             localStorage.setItem('userPasswords', JSON.stringify(passwords));
-            
+
             // Also save to Firebase if configured
             if (FirebasePasswordService.isConfigured()) {
               await FirebasePasswordService.savePassword(editingUser.username, userForm.password.trim());
             }
           }
-          console.log('Admin: Password updated successfully');
+          logger.log('Admin: Password updated successfully');
         }
       } else {
-        console.log('Admin: Creating user with password from form:', userForm.password);
-        console.log('Admin: Password length:', userForm.password.length);
+        logger.log('Admin: Creating user with password from form:', userForm.password);
+        logger.log('Admin: Password length:', userForm.password.length);
         await AuthService.createUser({
-          username: userForm.username.trim(),
-          email: userForm.email.trim(),
+          username: sanitizeString(userForm.username.trim()),
+          email: sanitizeString(userForm.email.trim()),
           role: userForm.role,
           assignedGroups: userForm.assignedGroups,
           assignedYears: userForm.assignedYears,
@@ -274,11 +312,11 @@ const Admin: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       setError(null);
     } catch (error) {
       setError('Failed to export users');
-      console.error('Export error:', error);
+      logger.error('Export error:', error);
     }
   };
 
@@ -352,7 +390,7 @@ const Admin: React.FC = () => {
       event.target.value = '';
     } catch (error) {
       setError('Failed to import users. Invalid file format.');
-      console.error('Import error:', error);
+      logger.error('Import error:', error);
     }
   };
 
@@ -775,14 +813,21 @@ const Admin: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          
+
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Username *"
                 value={userForm.username}
-                onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                onChange={(e) => {
+                  setUserForm({ ...userForm, username: e.target.value });
+                  if (validationErrors.username) {
+                    setValidationErrors({ ...validationErrors, username: '' });
+                  }
+                }}
+                error={!!validationErrors.username}
+                helperText={validationErrors.username}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -791,7 +836,14 @@ const Admin: React.FC = () => {
                 label="Email *"
                 type="email"
                 value={userForm.email}
-                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                onChange={(e) => {
+                  setUserForm({ ...userForm, email: e.target.value });
+                  if (validationErrors.email) {
+                    setValidationErrors({ ...validationErrors, email: '' });
+                  }
+                }}
+                error={!!validationErrors.email}
+                helperText={validationErrors.email}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -813,7 +865,14 @@ const Admin: React.FC = () => {
                 label={editingUser ? "New Password (leave empty to keep current)" : "Password *"}
                 type="password"
                 value={userForm.password}
-                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                onChange={(e) => {
+                  setUserForm({ ...userForm, password: e.target.value });
+                  if (validationErrors.password) {
+                    setValidationErrors({ ...validationErrors, password: '' });
+                  }
+                }}
+                error={!!validationErrors.password}
+                helperText={validationErrors.password}
               />
             </Grid>
             <Grid item xs={12}>

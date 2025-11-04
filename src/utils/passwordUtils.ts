@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { logger } from './logger';
 
 /**
  * Hash a plaintext password using bcrypt
@@ -23,7 +24,7 @@ export const verifyPassword = async (
   try {
     return await bcrypt.compare(password, hashedPassword);
   } catch (error) {
-    console.error('Error verifying password:', error);
+    logger.error('Error verifying password:', error);
     return false;
   }
 };

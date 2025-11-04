@@ -35,6 +35,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { Student, AttendanceRecord } from '../types';
 
 const Attendance: React.FC = () => {
@@ -110,7 +111,7 @@ const Attendance: React.FC = () => {
         setAttendanceRecords(prev => [...prev, { ...newRecord, id: `temp-${Date.now()}`, timestamp: new Date().toISOString() }]);
       }
     } catch (error) {
-      console.error('Error updating attendance:', error);
+      logger.error('Error updating attendance:', error);
     }
   };
 
@@ -136,7 +137,7 @@ const Attendance: React.FC = () => {
       
       setAttendanceRecords(filteredRecords);
     } catch (error) {
-      console.error('Error loading attendance:', error);
+      logger.error('Error loading attendance:', error);
     } finally {
       setLoadingAttendance(false);
     }

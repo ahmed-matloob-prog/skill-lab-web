@@ -40,6 +40,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { Student, AttendanceRecord, AssessmentRecord } from '../types';
 import { exportCombinedReportToExcel, exportSimplifiedReportToExcel } from '../utils/excelUtils';
 
@@ -184,7 +185,7 @@ const CombinedInput: React.FC = () => {
       });
       setStudentData(initialData);
     } catch (error) {
-      console.error('Error loading attendance:', error);
+      logger.error('Error loading attendance:', error);
     } finally {
       setLoadingData(false);
     }

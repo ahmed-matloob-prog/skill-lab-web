@@ -5,6 +5,7 @@
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { db, isConfigured } from '../config/firebase';
 import { User } from '../types';
+import { logger } from '../utils/logger';
 
 class FirebaseUserService {
   private usersCollection = 'users';
@@ -12,15 +13,15 @@ class FirebaseUserService {
   // Get all users from Firebase
   async getAllUsers(): Promise<User[]> {
     if (!db || !isConfigured) {
-      console.log('Firebase: Not configured, returning empty array');
+      logger.log('Firebase: Not configured, returning empty array');
       return [];
     }
-    
+
     try {
-      console.log('Firebase: Fetching all users from Firestore...');
+      logger.log('Firebase: Fetching all users from Firestore...');
       const usersSnapshot = await getDocs(collection(db, this.usersCollection));
       const users: User[] = [];
-      
+
       usersSnapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data();
         const user = {
@@ -31,10 +32,10 @@ class FirebaseUserService {
         users.push(user);
       });
 
-      console.log('Firebase: Retrieved', users.length, 'users from Firestore:', users.map(u => u.username));
+      logger.log('Firebase: Retrieved', users.length, 'users from Firestore:', users.map(u => u.username));
       return users;
     } catch (error) {
-      console.error('Firebase: Error getting users:', error);
+      logger.error('Firebase: Error getting users:', error);
       // Fallback to localStorage if Firebase fails
       const fallback = localStorage.getItem('users');
       return fallback ? JSON.parse(fallback) : [];
@@ -54,7 +55,7 @@ class FirebaseUserService {
       }
       return null;
     } catch (error) {
-      console.error('Firebase: Error getting user:', error);
+      logger.error('Firebase: Error getting user:', error);
       return null;
     }
   }
@@ -64,21 +65,21 @@ class FirebaseUserService {
     if (!db || !isConfigured) {
       return null;
     }
-    
+
     try {
       const q = query(
         collection(db, this.usersCollection),
         where('username', '==', username.toLowerCase().trim())
       );
       const querySnapshot = await getDocs(q);
-      
+
       if (!querySnapshot.empty) {
         const docSnapshot = querySnapshot.docs[0];
         return { id: docSnapshot.id, ...docSnapshot.data() } as User;
       }
       return null;
     } catch (error) {
-      console.error('Firebase: Error getting user by username:', error);
+      logger.error('Firebase: Error getting user by username:', error);
       return null;
     }
   }
@@ -88,11 +89,11 @@ class FirebaseUserService {
     if (!db || !isConfigured) {
       throw new Error('Firebase not configured');
     }
-    
+
     try {
       const userId = user.id || `user-${Date.now()}`;
       const userRef = doc(db, this.usersCollection, userId);
-      
+
       // Store username in lowercase for case-insensitive lookup
       const userData = {
         ...user,
@@ -103,12 +104,12 @@ class FirebaseUserService {
         updatedAt: new Date().toISOString(),
       };
 
-      console.log('Firebase: Creating user in Firestore:', userId, user.username);
+      logger.log('Firebase: Creating user in Firestore:', userId, user.username);
       await setDoc(userRef, userData);
-      console.log('Firebase: User created successfully in Firestore:', userId, user.username);
+      logger.log('Firebase: User created successfully in Firestore:', userId, user.username);
       return userId;
     } catch (error) {
-      console.error('Firebase: Error creating user:', error);
+      logger.error('Firebase: Error creating user:', error);
       throw error;
     }
   }
@@ -118,11 +119,11 @@ class FirebaseUserService {
     if (!db || !isConfigured) {
       throw new Error('Firebase not configured');
     }
-    
+
     try {
       const userRef = doc(db, this.usersCollection, userId);
       const currentUser = await this.getUserById(userId);
-      
+
       if (!currentUser) {
         throw new Error('User not found');
       }
@@ -139,9 +140,9 @@ class FirebaseUserService {
       }
 
       await setDoc(userRef, updateData, { merge: true });
-      console.log('Firebase: User updated:', userId);
+      logger.log('Firebase: User updated:', userId);
     } catch (error) {
-      console.error('Firebase: Error updating user:', error);
+      logger.error('Firebase: Error updating user:', error);
       throw error;
     }
   }
@@ -151,13 +152,13 @@ class FirebaseUserService {
     if (!db || !isConfigured) {
       throw new Error('Firebase not configured');
     }
-    
+
     try {
       const userRef = doc(db, this.usersCollection, userId);
       await deleteDoc(userRef);
-      console.log('Firebase: User deleted:', userId);
+      logger.log('Firebase: User deleted:', userId);
     } catch (error) {
-      console.error('Firebase: Error deleting user:', error);
+      logger.error('Firebase: Error deleting user:', error);
       throw error;
     }
   }
@@ -168,10 +169,10 @@ class FirebaseUserService {
       // Return empty unsubscribe function if not configured
       return () => {};
     }
-    
+
     try {
       const usersQuery = collection(db, this.usersCollection);
-      
+
       const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
         const users: User[] = [];
         snapshot.forEach((docSnapshot) => {
@@ -182,17 +183,17 @@ class FirebaseUserService {
             username: data.usernameOriginal || data.username, // Use original casing for display
           } as User);
         });
-        console.log('Firebase: Users updated in real-time:', users.length, 'users:', users.map(u => u.username));
+        logger.log('Firebase: Users updated in real-time:', users.length, 'users:', users.map(u => u.username));
         callback(users);
       }, (error) => {
-        console.error('Firebase: Error in users subscription:', error);
+        logger.error('Firebase: Error in users subscription:', error);
         // Fallback to regular fetch
         this.getAllUsers().then(callback);
       });
 
       return unsubscribe;
     } catch (error) {
-      console.error('Firebase: Error subscribing to users:', error);
+      logger.error('Firebase: Error subscribing to users:', error);
       // Fallback to regular fetch
       this.getAllUsers().then(callback);
       return () => {}; // Return empty unsubscribe function

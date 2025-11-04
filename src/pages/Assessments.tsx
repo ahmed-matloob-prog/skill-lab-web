@@ -40,6 +40,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { Student, AssessmentRecord } from '../types';
 
 const Assessments: React.FC = () => {
@@ -111,7 +112,7 @@ const Assessments: React.FC = () => {
         const assessments = await getAssessmentsByGroup(selectedGroup);
         setSavedAssessments(assessments);
       } catch (error) {
-        console.error('Error loading saved assessments:', error);
+        logger.error('Error loading saved assessments:', error);
       }
     } else {
       setSavedAssessments([]);

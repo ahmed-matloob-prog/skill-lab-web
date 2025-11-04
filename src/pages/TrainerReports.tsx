@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { exportCombinedReportToExcel } from '../utils/excelUtils';
 import { Student } from '../types';
 
@@ -163,7 +164,7 @@ const TrainerReports: React.FC = () => {
       const year = selectedYear !== 'all' ? selectedYear as number : undefined;
       exportCombinedReportToExcel(trainerAttendance, trainerAssessments, trainerStudents, groups, year);
     } catch (error) {
-      console.error('Export failed:', error);
+      logger.error('Export failed:', error);
     }
   };
 

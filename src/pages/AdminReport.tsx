@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 import { exportSimplifiedReportToExcel } from '../utils/excelUtils';
 import { Student } from '../types';
 
@@ -145,7 +146,7 @@ const AdminReport: React.FC = () => {
 
       setReportData(reportData);
     } catch (error) {
-      console.error('Error generating report:', error);
+      logger.error('Error generating report:', error);
     } finally {
       setLoadingReport(false);
     }
@@ -156,7 +157,7 @@ const AdminReport: React.FC = () => {
       const year = selectedYear !== 'all' ? selectedYear as number : undefined;
       exportSimplifiedReportToExcel(assessments, students, groups, year);
     } catch (error) {
-      console.error('Export failed:', error);
+      logger.error('Export failed:', error);
     }
   };
 

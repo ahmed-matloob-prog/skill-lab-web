@@ -1,4 +1,5 @@
 import { Student, Group, AttendanceRecord, AssessmentRecord } from '../types';
+import { logger } from '../utils/logger';
 
 class DatabaseService {
   private studentsKey = 'students';
@@ -29,7 +30,7 @@ class DatabaseService {
         localStorage.setItem(this.assessmentsKey, JSON.stringify([]));
       }
     } catch (error) {
-      console.error('Error initializing database:', error);
+      logger.error('Error initializing database:', error);
       throw error;
     }
   }

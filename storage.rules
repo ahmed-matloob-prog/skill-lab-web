@@ -1,0 +1,109 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isTrainer() {
+      return isAuthenticated() &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'trainer';
+    }
+
+    // Validate file size (max 5MB)
+    function isValidSize() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Validate image file types
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // Validate document file types
+    function isDocument() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('application/msword') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*') ||
+             request.resource.contentType.matches('text/csv') ||
+             request.resource.contentType.matches('application/vnd.ms-excel');
+    }
+
+    // User profile images
+    match /profile-images/{userId}/{fileName} {
+      // Users can read their own profile images
+      allow read: if isAuthenticated();
+
+      // Users can upload their own profile images
+      allow create: if isAuthenticated() &&
+                       request.auth.uid == userId &&
+                       isImage() &&
+                       isValidSize();
+
+      // Users can update/delete their own profile images
+      allow update, delete: if isAuthenticated() &&
+                               request.auth.uid == userId;
+
+      // Admins can manage all profile images
+      allow read, write: if isAdmin();
+    }
+
+    // Student profile images
+    match /student-images/{studentId}/{fileName} {
+      // All authenticated users can read student images
+      allow read: if isAuthenticated();
+
+      // Trainers and admins can upload student images
+      allow create: if (isAdmin() || isTrainer()) &&
+                       isImage() &&
+                       isValidSize();
+
+      // Trainers and admins can update/delete student images
+      allow update, delete: if isAdmin() || isTrainer();
+    }
+
+    // Reports and exports
+    match /reports/{userId}/{fileName} {
+      // Users can read their own reports
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+
+      // Trainers and admins can create reports
+      allow create: if (isAdmin() || isTrainer()) &&
+                       isDocument() &&
+                       isValidSize();
+
+      // Users can delete their own reports
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+
+      // Admins can manage all reports
+      allow read, write: if isAdmin();
+    }
+
+    // Admin exports
+    match /admin-exports/{fileName} {
+      // Only admins can access admin exports
+      allow read, write: if isAdmin() &&
+                            isDocument() &&
+                            isValidSize();
+    }
+
+    // Backup files
+    match /backups/{fileName} {
+      // Only admins can access backups
+      allow read, write: if isAdmin();
+    }
+
+    // Deny all other access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
