@@ -1,6 +1,8 @@
 import { User, LoginCredentials } from '../types';
 import FirebaseUserService from './firebaseUserService';
 import FirebasePasswordService from './firebasePasswordService';
+import { hashPassword, verifyPassword, isBcryptHash } from '../utils/passwordUtils';
+import { logger } from '../utils/logger';
 
 // Production users data - Admin user and demo trainer accounts
 const productionUsers: User[] = [
@@ -48,8 +50,9 @@ const productionUsers: User[] = [
   },
 ];
 
-// Default passwords (in a real app, these would be hashed)
-const defaultPasswords: { [username: string]: string } = {
+// Default passwords - will be hashed on first use
+// These are only used for initial setup
+const defaultPlaintextPasswords: { [username: string]: string } = {
   'admin': 'admin123',
   'trainer1': 'trainer123',
   'trainer2': 'trainer123',
@@ -61,10 +64,17 @@ class AuthService {
   private usersKey = 'users';
   private currentUserKey = 'currentUser';
   private passwordsKey = 'userPasswords';
+  private initialized: Promise<void>;
 
   constructor() {
     this.initializeUsers();
-    this.initializePasswords();
+    // Initialize passwords asynchronously and store the promise
+    this.initialized = this.initializePasswords();
+  }
+
+  // Ensure initialization is complete before any operations
+  private async ensureInitialized(): Promise<void> {
+    await this.initialized;
   }
 
   private initializeUsers(): void {
@@ -88,31 +98,50 @@ class AuthService {
     }
   }
 
-  private initializePasswords(): void {
+  private async initializePasswords(): Promise<void> {
     // Initialize passwords in localStorage if they don't exist
     const existingPasswords = localStorage.getItem(this.passwordsKey);
     if (!existingPasswords) {
-      localStorage.setItem(this.passwordsKey, JSON.stringify(defaultPasswords));
+      // Hash default passwords before storing
+      const hashedPasswords: { [username: string]: string } = {};
+      for (const [username, plaintextPassword] of Object.entries(defaultPlaintextPasswords)) {
+        hashedPasswords[username] = await hashPassword(plaintextPassword);
+      }
+      localStorage.setItem(this.passwordsKey, JSON.stringify(hashedPasswords));
+      logger.log('Initialized passwords with bcrypt hashing');
     } else {
-      // Merge any new default passwords that don't exist in localStorage
+      // Migrate existing plaintext passwords to hashed passwords
       const storedPasswords = JSON.parse(existingPasswords);
-      const mergedPasswords = { ...storedPasswords };
-      
-      Object.keys(defaultPasswords).forEach(username => {
-        if (!(username in mergedPasswords)) {
-          mergedPasswords[username] = defaultPasswords[username];
+      let needsMigration = false;
+
+      for (const [username, password] of Object.entries(storedPasswords)) {
+        // Check if password is already hashed
+        if (!isBcryptHash(password as string)) {
+          needsMigration = true;
+          logger.log(`Migrating plaintext password for user: ${username}`);
+          storedPasswords[username] = await hashPassword(password as string);
         }
-      });
-      
-      // Update localStorage with merged passwords
-      localStorage.setItem(this.passwordsKey, JSON.stringify(mergedPasswords));
+      }
+
+      // Add any new default users that don't exist
+      for (const [username, plaintextPassword] of Object.entries(defaultPlaintextPasswords)) {
+        if (!(username in storedPasswords)) {
+          storedPasswords[username] = await hashPassword(plaintextPassword);
+          logger.log(`Added new default user: ${username}`);
+        }
+      }
+
+      if (needsMigration) {
+        localStorage.setItem(this.passwordsKey, JSON.stringify(storedPasswords));
+        logger.log('Password migration completed');
+      }
     }
   }
 
   private async getPasswords(): Promise<{ [username: string]: string }> {
     // Start with localStorage passwords (for default users and backwards compatibility)
     const localPasswords = localStorage.getItem(this.passwordsKey);
-    const passwords = localPasswords ? JSON.parse(localPasswords) : { ...defaultPasswords };
+    const passwords = localPasswords ? JSON.parse(localPasswords) : {};
     
     // Merge with Firebase passwords if configured
     if (FirebasePasswordService.isConfigured()) {
@@ -138,9 +167,9 @@ class AuthService {
             }
           }
         }
-        console.log('Firebase: Merged passwords from Firebase with localStorage');
+        logger.log('Firebase: Merged passwords from Firebase with localStorage');
       } catch (error) {
-        console.error('Firebase: Error getting passwords, using localStorage only:', error);
+        logger.error('Firebase: Error getting passwords, using localStorage only:', error);
       }
     }
     
@@ -165,7 +194,7 @@ class AuthService {
           }
         }
       } catch (error) {
-        console.error('Firebase: Error saving passwords, using localStorage only:', error);
+        logger.error('Firebase: Error saving passwords, using localStorage only:', error);
       }
     }
   }
@@ -187,7 +216,7 @@ class AuthService {
         
         return allUsers;
       } catch (error) {
-        console.error('Firebase: Error getting users, falling back to localStorage:', error);
+        logger.error('Firebase: Error getting users, falling back to localStorage:', error);
         // Fallback to localStorage
       }
     }
@@ -207,7 +236,7 @@ class AuthService {
           !productionUsernames.includes(u.username.toLowerCase())
         );
         
-        console.log('AuthService: Saving', usersToSave.length, 'users to Firebase (excluding', productionUsernames.length, 'production users)');
+        logger.log('AuthService: Saving', usersToSave.length, 'users to Firebase (excluding', productionUsernames.length, 'production users)');
         
         // Get existing Firebase users to compare
         const existingFirebaseUsers = await FirebaseUserService.getAllUsers();
@@ -216,10 +245,10 @@ class AuthService {
         // Save/update each user in Firebase
         for (const user of usersToSave) {
           if (existingIds.has(user.id)) {
-            console.log('AuthService: Updating existing Firebase user:', user.username);
+            logger.log('AuthService: Updating existing Firebase user:', user.username);
             await FirebaseUserService.updateUser(user.id, user);
           } else {
-            console.log('AuthService: Creating new Firebase user:', user.username);
+            logger.log('AuthService: Creating new Firebase user:', user.username);
             await FirebaseUserService.createUser(user);
           }
         }
@@ -227,19 +256,19 @@ class AuthService {
         // Delete users that are in Firebase but not in the new list
         for (const fbUser of existingFirebaseUsers) {
           if (!users.find(u => u.id === fbUser.id)) {
-            console.log('AuthService: Deleting Firebase user:', fbUser.username);
+            logger.log('AuthService: Deleting Firebase user:', fbUser.username);
             await FirebaseUserService.deleteUser(fbUser.id);
           }
         }
         
-        console.log('AuthService: All users saved successfully to Firebase');
+        logger.log('AuthService: All users saved successfully to Firebase');
       } catch (error) {
-        console.error('Firebase: Error saving users, falling back to localStorage:', error);
+        logger.error('Firebase: Error saving users, falling back to localStorage:', error);
         // Fallback to localStorage
         localStorage.setItem(this.usersKey, JSON.stringify(users));
       }
     } else {
-      console.log('AuthService: Firebase not configured, saving to localStorage only');
+      logger.log('AuthService: Firebase not configured, saving to localStorage only');
       // Use localStorage if Firebase not configured
       localStorage.setItem(this.usersKey, JSON.stringify(users));
     }
@@ -253,60 +282,62 @@ class AuthService {
   // Find password by username (case-insensitive lookup)
   private findPasswordByUsername(username: string, passwords: { [username: string]: string }): string | undefined {
     const normalized = this.normalizeUsername(username);
-    console.log('findPasswordByUsername: Looking for username:', username, 'normalized:', normalized);
-    console.log('findPasswordByUsername: Available password keys:', Object.keys(passwords));
-    console.log('findPasswordByUsername: passwords[username]:', passwords[username]);
-    console.log('findPasswordByUsername: passwords[normalized]:', passwords[normalized]);
-    
+    logger.log('findPasswordByUsername: Looking for username:', username, 'normalized:', normalized);
+
     // Try exact match first (for performance)
     if (passwords[username]) {
-      console.log('findPasswordByUsername: Found via exact match');
+      logger.log('findPasswordByUsername: Found via exact match');
       return passwords[username];
     }
     // Try normalized match
     if (passwords[normalized]) {
-      console.log('findPasswordByUsername: Found via normalized match');
+      logger.log('findPasswordByUsername: Found via normalized match');
       return passwords[normalized];
     }
     // Try case-insensitive search through all keys
     const matchingKey = Object.keys(passwords).find(key => this.normalizeUsername(key) === normalized);
-    console.log('findPasswordByUsername: Case-insensitive search found key:', matchingKey);
+    logger.log('findPasswordByUsername: Case-insensitive search found key:', matchingKey);
     return matchingKey ? passwords[matchingKey] : undefined;
   }
 
   async login(credentials: LoginCredentials): Promise<User> {
+    await this.ensureInitialized(); // Wait for password hashing to complete
+
     const { username, password } = credentials;
     const normalizedUsername = this.normalizeUsername(username);
-    
-    console.log('AuthService: Login attempt for username:', username, 'normalized:', normalizedUsername);
-    
+
+    logger.log('AuthService: Login attempt for username:', username, 'normalized:', normalizedUsername);
+
     // Find user by username (case-insensitive)
     const users = await this.getUsers();
-    console.log('AuthService: Total users found:', users.length);
+    logger.log('AuthService: Total users found:', users.length);
     const user = users.find(u => this.normalizeUsername(u.username) === normalizedUsername && u.isActive);
-    
+
     if (!user) {
-      console.error('AuthService: User not found or not active:', username);
+      logger.error('AuthService: User not found or not active:', username);
       throw new Error('Invalid username or password');
     }
 
-    console.log('AuthService: User found:', user.username, 'role:', user.role);
+    logger.log('AuthService: User found:', user.username, 'role:', user.role);
 
-    // Check password (in a real app, this would be hashed)
+    // Check password using bcrypt
     const passwords = await this.getPasswords();
-    const correctPassword = this.findPasswordByUsername(username, passwords);
-    console.log('AuthService: Password lookup result:', correctPassword ? 'Found' : 'Not found');
-    console.log('AuthService: Input password length:', password.length, 'Correct password length:', correctPassword?.length);
-    console.log('AuthService: Input password:', password, 'Correct password:', correctPassword);
-    console.log('AuthService: Passwords match?', password === correctPassword);
-    
-    if (!correctPassword || password !== correctPassword) {
-      console.error('AuthService: Password mismatch for user:', username);
-      console.error('AuthService: Expected:', correctPassword, 'Got:', password);
+    const hashedPassword = this.findPasswordByUsername(username, passwords);
+
+    if (!hashedPassword) {
+      logger.error('AuthService: No password found for user:', username);
       throw new Error('Invalid username or password');
     }
-    
-    console.log('AuthService: Login successful for user:', username);
+
+    // Verify password using bcrypt
+    const isPasswordValid = await verifyPassword(password, hashedPassword);
+
+    if (!isPasswordValid) {
+      logger.error('AuthService: Password verification failed for user:', username);
+      throw new Error('Invalid username or password');
+    }
+
+    logger.log('AuthService: Login successful for user:', username);
 
     // Update last login
     const updatedUser = {
@@ -350,27 +381,37 @@ class AuthService {
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+    await this.ensureInitialized();
+
     const users = await this.getUsers();
     const user = users.find(u => u.id === userId);
-    
+
     if (!user) {
       throw new Error('User not found');
     }
 
-    // Check old password (case-insensitive lookup)
+    // Verify old password using bcrypt
     const passwords = await this.getPasswords();
-    const correctPassword = this.findPasswordByUsername(user.username, passwords);
-    if (!correctPassword || oldPassword !== correctPassword) {
+    const hashedPassword = this.findPasswordByUsername(user.username, passwords);
+
+    if (!hashedPassword) {
       throw new Error('Current password is incorrect');
     }
 
-    // Update password (in a real app, this would be hashed)
+    const isOldPasswordValid = await verifyPassword(oldPassword, hashedPassword);
+    if (!isOldPasswordValid) {
+      throw new Error('Current password is incorrect');
+    }
+
+    // Hash new password
+    const newHashedPassword = await hashPassword(newPassword);
+
     // Store with normalized username for consistency
     const normalizedUsername = this.normalizeUsername(user.username);
-    passwords[normalizedUsername] = newPassword;
+    passwords[normalizedUsername] = newHashedPassword;
     // Also keep original for backwards compatibility
     if (normalizedUsername !== user.username) {
-      passwords[user.username] = newPassword;
+      passwords[user.username] = newHashedPassword;
     }
     await this.savePasswords(passwords);
 
@@ -395,12 +436,13 @@ class AuthService {
   }
 
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'lastLogin'>, password: string): Promise<User> {
-    console.log('AuthService: createUser called with username:', userData.username, 'password length:', password.length);
-    console.log('AuthService: createUser received password:', password);
-    
+    await this.ensureInitialized();
+
+    logger.log('AuthService: createUser called with username:', userData.username, 'password length:', password.length);
+
     const users = await this.getUsers();
     const normalizedUsername = this.normalizeUsername(userData.username);
-    
+
     // Check if username already exists (case-insensitive)
     if (users.find(u => this.normalizeUsername(u.username) === normalizedUsername)) {
       throw new Error('Username already exists');
@@ -417,29 +459,29 @@ class AuthService {
       createdAt: new Date().toISOString(),
     };
 
-    console.log('AuthService: Creating new user:', newUser.username, 'ID:', newUser.id);
+    logger.log('AuthService: Creating new user:', newUser.username, 'ID:', newUser.id);
 
-    // Add password to stored passwords (in a real app, this would be hashed)
+    // Hash password before storing
+    const hashedPassword = await hashPassword(password);
+
     // Store password with normalized username as key for consistent lookup
     const passwords = await this.getPasswords();
-    passwords[normalizedUsername] = password;
+    passwords[normalizedUsername] = hashedPassword;
     // Also store with original username for backwards compatibility
     if (normalizedUsername !== userData.username) {
-      passwords[userData.username] = password;
+      passwords[userData.username] = hashedPassword;
     }
-    
-    console.log('AuthService: Saving password for user:', userData.username, 'normalized:', normalizedUsername);
-    console.log('AuthService: Password being saved:', password);
-    console.log('AuthService: Password stored at key:', normalizedUsername, 'value:', passwords[normalizedUsername]);
-    
+
+    logger.log('AuthService: Saving hashed password for user:', userData.username);
+
     await this.savePasswords(passwords);
 
     // Save user to Firebase and localStorage
     const updatedUsers = [...users, newUser];
-    console.log('AuthService: Saving user to storage. Total users:', updatedUsers.length);
+    logger.log('AuthService: Saving user to storage. Total users:', updatedUsers.length);
     await this.saveUsers(updatedUsers);
-    
-    console.log('AuthService: User created and saved successfully:', newUser.username);
+
+    logger.log('AuthService: User created and saved successfully:', newUser.username);
 
     return newUser;
   }
@@ -487,9 +529,9 @@ class AuthService {
     if (FirebaseUserService.isConfigured() && !productionUsers.find(u => u.id === userId)) {
       try {
         await FirebaseUserService.deleteUser(userId);
-        console.log('Firebase: User deleted:', userId);
+        logger.log('Firebase: User deleted:', userId);
       } catch (error) {
-        console.error('Firebase: Error deleting user, falling back to localStorage:', error);
+        logger.error('Firebase: Error deleting user, falling back to localStorage:', error);
       }
     }
 
@@ -517,7 +559,7 @@ class AuthService {
       try {
         await FirebasePasswordService.deletePassword(user.username);
       } catch (error) {
-        console.error('Firebase: Error deleting password:', error);
+        logger.error('Firebase: Error deleting password:', error);
       }
     }
 
