@@ -1,0 +1,21 @@
+# Quick Firebase Deployment Commands
+# Copy and paste these commands one by one in your terminal
+
+# 1. Navigate to project directory
+cd "C:\Users\ahmed\Documents\python app\skill lab web"
+
+# 2. Login to Firebase
+firebase login
+
+# 3. Initialize Firebase (answer questions as per DEPLOY_TO_FIREBASE.md)
+firebase init
+
+# 4. Deploy security rules only
+firebase deploy --only firestore:rules,storage:rules
+
+# 5. Check deployment status
+firebase deploy:history
+
+# Done! Now verify in Firebase Console:
+# Firestore Rules: https://console.firebase.google.com/u/1/project/skill-lab-web/firestore/databases/-default-/rules
+# Storage Rules: https://console.firebase.google.com/u/1/project/skill-lab-web/storage/rules
