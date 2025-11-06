@@ -1106,3 +1106,299 @@ export const exportUnitWeeklyPerformanceWithTrendsAndCharts = (
   const fileName = `${unit}_Year${year}_Weekly_Performance_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(data, fileName);
 };
+
+// Group Performance Summary Export
+// Provides comparative analysis across all groups
+export const exportGroupPerformanceSummary = (
+  attendance: AttendanceRecord[],
+  assessments: AssessmentRecord[],
+  students: Student[],
+  groups: Group[],
+  year?: number
+): void => {
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  // Filter by year if specified
+  const filteredStudents = year ? students.filter(s => s.year === year) : students;
+  const filteredAttendance = year ? attendance.filter(a => a.year === year) : attendance;
+  const filteredAssessments = year ? assessments.filter(a => a.year === year) : assessments;
+  const filteredGroups = year ? groups.filter(g => g.year === year) : groups;
+
+  const workbook = XLSX.utils.book_new();
+
+  // ============= SHEET 1: Group Comparison =============
+  const groupComparisonData: any[] = [];
+
+  // Header
+  groupComparisonData.push({
+    'Group': year ? `Group Performance Summary - Year ${year}` : 'Group Performance Summary - All Years',
+    'Students': `Export Date: ${exportDate}`,
+    'Avg Attendance': '',
+    'Avg Score': '',
+    'Top Student': '',
+    'Top Score': '',
+    'Need Attention': '',
+    'Trainer': '',
+    'Performance Status': '',
+  });
+
+  groupComparisonData.push({
+    'Group': '',
+    'Students': '',
+    'Avg Attendance': '',
+    'Avg Score': '',
+    'Top Student': '',
+    'Top Score': '',
+    'Need Attention': '',
+    'Trainer': '',
+    'Performance Status': '',
+  });
+
+  // Calculate statistics for each group
+  filteredGroups.forEach(group => {
+    const groupStudents = filteredStudents.filter(s => s.groupId === group.id);
+    const groupAttendance = filteredAttendance.filter(a => a.groupId === group.id);
+    const groupAssessments = filteredAssessments.filter(a => a.groupId === group.id);
+
+    // Calculate attendance rate
+    const totalAttendance = groupAttendance.length;
+    const presentCount = groupAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
+    const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
+
+    // Calculate average score
+    const totalScore = groupAssessments.reduce((sum, a) => sum + a.score, 0);
+    const totalMaxScore = groupAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+    const avgScore = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+
+    // Find top performer
+    const studentAverages = groupStudents.map(student => {
+      const studentAssessments = groupAssessments.filter(a => a.studentId === student.id);
+      const scores = studentAssessments.map(a => Math.round((a.score / a.maxScore) * 100));
+      const average = scores.length > 0 ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length) : 0;
+      return { name: student.name, average };
+    }).sort((a, b) => b.average - a.average);
+
+    const topStudent = studentAverages.length > 0 ? studentAverages[0] : { name: 'N/A', average: 0 };
+
+    // Count students needing attention
+    const needAttentionCount = studentAverages.filter(s => s.average < 60 && s.average > 0).length;
+
+    // Get trainer (from attendance/assessment records)
+    const trainerIdsSet = new Set([
+      ...groupAttendance.map(a => a.trainerId),
+      ...groupAssessments.map(a => a.trainerId)
+    ]);
+    const trainerIds = Array.from(trainerIdsSet);
+    const trainerName = trainerIds.length > 0 ? `Trainer ${trainerIds[0].slice(-4)}` : 'Unassigned';
+
+    // Performance status
+    let performanceStatus = 'N/A';
+    if (avgScore >= 85) performanceStatus = 'Excellent';
+    else if (avgScore >= 75) performanceStatus = 'Good';
+    else if (avgScore >= 60) performanceStatus = 'Pass';
+    else if (avgScore > 0) performanceStatus = 'Need Improvement';
+
+    groupComparisonData.push({
+      'Group': group.name,
+      'Students': groupStudents.length,
+      'Avg Attendance': `${attendanceRate}%`,
+      'Avg Score': `${avgScore}%`,
+      'Top Student': topStudent.name,
+      'Top Score': `${topStudent.average}%`,
+      'Need Attention': needAttentionCount,
+      'Trainer': trainerName,
+      'Performance Status': performanceStatus,
+    });
+  });
+
+  const sheet1 = XLSX.utils.json_to_sheet(groupComparisonData);
+
+  // Auto-size columns
+  sheet1['!cols'] = [
+    { wch: 15 }, // Group
+    { wch: 12 }, // Students
+    { wch: 15 }, // Avg Attendance
+    { wch: 12 }, // Avg Score
+    { wch: 25 }, // Top Student
+    { wch: 12 }, // Top Score
+    { wch: 15 }, // Need Attention
+    { wch: 15 }, // Trainer
+    { wch: 18 }, // Performance Status
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet1, 'Group Comparison');
+
+  // ============= SHEET 2: Detailed Statistics =============
+  const detailedStatsData: any[] = [];
+
+  detailedStatsData.push({
+    'Group': year ? `Detailed Group Statistics - Year ${year}` : 'Detailed Group Statistics - All Years',
+    'Total Students': `Export Date: ${exportDate}`,
+    'Total Attendance': '',
+    'Total Assessments': '',
+    'Present Count': '',
+    'Absent Count': '',
+    'Late Count': '',
+    'Excellent Count (≥85%)': '',
+    'Pass Rate (≥60%)': '',
+  });
+
+  detailedStatsData.push({
+    'Group': '',
+    'Total Students': '',
+    'Total Attendance': '',
+    'Total Assessments': '',
+    'Present Count': '',
+    'Absent Count': '',
+    'Late Count': '',
+    'Excellent Count (≥85%)': '',
+    'Pass Rate (≥60%)': '',
+  });
+
+  filteredGroups.forEach(group => {
+    const groupStudents = filteredStudents.filter(s => s.groupId === group.id);
+    const groupAttendance = filteredAttendance.filter(a => a.groupId === group.id);
+    const groupAssessments = filteredAssessments.filter(a => a.groupId === group.id);
+
+    // Attendance breakdown
+    const presentCount = groupAttendance.filter(a => a.status === 'present').length;
+    const absentCount = groupAttendance.filter(a => a.status === 'absent').length;
+    const lateCount = groupAttendance.filter(a => a.status === 'late').length;
+
+    // Assessment statistics
+    const percentages = groupAssessments.map(a => Math.round((a.score / a.maxScore) * 100));
+    const excellentCount = percentages.filter(p => p >= 85).length;
+    const passCount = percentages.filter(p => p >= 60).length;
+    const passRate = percentages.length > 0 ? Math.round((passCount / percentages.length) * 100) : 0;
+
+    detailedStatsData.push({
+      'Group': group.name,
+      'Total Students': groupStudents.length,
+      'Total Attendance': groupAttendance.length,
+      'Total Assessments': groupAssessments.length,
+      'Present Count': presentCount,
+      'Absent Count': absentCount,
+      'Late Count': lateCount,
+      'Excellent Count (≥85%)': excellentCount,
+      'Pass Rate (≥60%)': `${passRate}%`,
+    });
+  });
+
+  const sheet2 = XLSX.utils.json_to_sheet(detailedStatsData);
+
+  sheet2['!cols'] = [
+    { wch: 15 }, // Group
+    { wch: 15 }, // Total Students
+    { wch: 18 }, // Total Attendance
+    { wch: 18 }, // Total Assessments
+    { wch: 15 }, // Present Count
+    { wch: 15 }, // Absent Count
+    { wch: 12 }, // Late Count
+    { wch: 22 }, // Excellent Count
+    { wch: 18 }, // Pass Rate
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet2, 'Detailed Statistics');
+
+  // ============= SHEET 3: Rankings =============
+  const rankingsData: any[] = [];
+
+  rankingsData.push({
+    'Metric': year ? `Group Rankings - Year ${year}` : 'Group Rankings - All Years',
+    'Rank': '',
+    'Group': '',
+    'Value': `Export Date: ${exportDate}`,
+  });
+
+  rankingsData.push({
+    'Metric': '',
+    'Rank': '',
+    'Group': '',
+    'Value': '',
+  });
+
+  // Calculate all metrics for ranking
+  const groupMetrics = filteredGroups.map(group => {
+    const groupStudents = filteredStudents.filter(s => s.groupId === group.id);
+    const groupAttendance = filteredAttendance.filter(a => a.groupId === group.id);
+    const groupAssessments = filteredAssessments.filter(a => a.groupId === group.id);
+
+    const presentCount = groupAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
+    const attendanceRate = groupAttendance.length > 0 ? Math.round((presentCount / groupAttendance.length) * 100) : 0;
+
+    const totalScore = groupAssessments.reduce((sum, a) => sum + a.score, 0);
+    const totalMaxScore = groupAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+    const avgScore = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+
+    return {
+      groupName: group.name,
+      studentCount: groupStudents.length,
+      attendanceRate,
+      avgScore,
+    };
+  });
+
+  // Ranking by Average Score
+  rankingsData.push({ 'Metric': '=== By Average Score ===', 'Rank': '', 'Group': '', 'Value': '' });
+  const scoreRanking = [...groupMetrics].sort((a, b) => b.avgScore - a.avgScore);
+  scoreRanking.forEach((group, index) => {
+    rankingsData.push({
+      'Metric': 'Average Score',
+      'Rank': index + 1,
+      'Group': group.groupName,
+      'Value': `${group.avgScore}%`,
+    });
+  });
+
+  rankingsData.push({ 'Metric': '', 'Rank': '', 'Group': '', 'Value': '' });
+
+  // Ranking by Attendance Rate
+  rankingsData.push({ 'Metric': '=== By Attendance Rate ===', 'Rank': '', 'Group': '', 'Value': '' });
+  const attendanceRanking = [...groupMetrics].sort((a, b) => b.attendanceRate - a.attendanceRate);
+  attendanceRanking.forEach((group, index) => {
+    rankingsData.push({
+      'Metric': 'Attendance Rate',
+      'Rank': index + 1,
+      'Group': group.groupName,
+      'Value': `${group.attendanceRate}%`,
+    });
+  });
+
+  rankingsData.push({ 'Metric': '', 'Rank': '', 'Group': '', 'Value': '' });
+
+  // Ranking by Student Count
+  rankingsData.push({ 'Metric': '=== By Student Count ===', 'Rank': '', 'Group': '', 'Value': '' });
+  const studentCountRanking = [...groupMetrics].sort((a, b) => b.studentCount - a.studentCount);
+  studentCountRanking.forEach((group, index) => {
+    rankingsData.push({
+      'Metric': 'Student Count',
+      'Rank': index + 1,
+      'Group': group.groupName,
+      'Value': group.studentCount,
+    });
+  });
+
+  const sheet3 = XLSX.utils.json_to_sheet(rankingsData);
+
+  sheet3['!cols'] = [
+    { wch: 25 }, // Metric
+    { wch: 8 },  // Rank
+    { wch: 15 }, // Group
+    { wch: 15 }, // Value
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet3, 'Rankings');
+
+  // Generate Excel file
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const fileName = year
+    ? `Group_Performance_Summary_Year${year}_${new Date().toISOString().split('T')[0]}.xlsx`
+    : `Group_Performance_Summary_AllYears_${new Date().toISOString().split('T')[0]}.xlsx`;
+  saveAs(data, fileName);
+};

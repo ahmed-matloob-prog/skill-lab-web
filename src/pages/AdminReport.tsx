@@ -33,7 +33,7 @@ import {
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
-import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts } from '../utils/excelUtils';
+import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary } from '../utils/excelUtils';
 import { Student } from '../types';
 
 const AdminReport: React.FC = () => {
@@ -189,6 +189,21 @@ const AdminReport: React.FC = () => {
     }
   };
 
+  const handleExportGroupPerformanceSummary = () => {
+    try {
+      const year = selectedYear !== 'all' ? selectedYear as number : undefined;
+      exportGroupPerformanceSummary(
+        attendance,
+        assessments,
+        students,
+        groups,
+        year
+      );
+    } catch (error) {
+      logger.error('Group performance export failed:', error);
+    }
+  };
+
   useEffect(() => {
     if (selectedYear !== 'all' || selectedGroup !== 'all') {
       generateGrandReport();
@@ -281,6 +296,46 @@ const AdminReport: React.FC = () => {
               >
                 Export Report
               </Button>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
+      {/* Group Performance Summary Export */}
+      <Card sx={{ mb: 3, bgcolor: '#fff3e0' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+            <School sx={{ mr: 1 }} />
+            Group Performance Summary
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Compare all groups with rankings, top performers, and detailed statistics across 3 comprehensive sheets
+          </Typography>
+          <Divider sx={{ my: 2 }} />
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                {selectedYear !== 'all'
+                  ? `Export group comparison for Year ${selectedYear}`
+                  : 'Export group comparison for All Years'}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Button
+                variant="contained"
+                color="warning"
+                startIcon={<School />}
+                onClick={handleExportGroupPerformanceSummary}
+                disabled={loadingReport}
+                fullWidth
+              >
+                Export Group Summary
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Alert severity="info" sx={{ py: 0.5 }}>
+                3 sheets: Comparison, Statistics, Rankings
+              </Alert>
             </Grid>
           </Grid>
         </CardContent>
