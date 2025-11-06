@@ -1,17 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline } from '@mui/material';
+import { CssBaseline, CircularProgress, Box } from '@mui/material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DatabaseProvider } from './contexts/DatabaseContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import Layout from './components/Layout';
 import LoginForm from './components/LoginForm';
-import Dashboard from './pages/Dashboard';
-import Students from './pages/Students';
-import CombinedInput from './pages/CombinedInput';
-import Admin from './pages/Admin';
-import Sync from './pages/Sync';
+import LoadingSpinner from './components/LoadingSpinner';
+import { USER_ROLES } from './constants';
+
+// Lazy load pages for code splitting
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Students = lazy(() => import('./pages/Students'));
+const CombinedInput = lazy(() => import('./pages/CombinedInput'));
+const Admin = lazy(() => import('./pages/Admin'));
+const Sync = lazy(() => import('./pages/Sync'));
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -70,16 +74,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
-      }}>
-        <div>Loading...</div>
-      </div>
-    );
+    return <LoadingSpinner fullScreen message="Authenticating..." />;
   }
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
@@ -90,23 +85,14 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
-      }}>
-        <div>Loading...</div>
-      </div>
-    );
+    return <LoadingSpinner fullScreen message="Verifying permissions..." />;
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (user?.role !== 'admin') {
+  if (user?.role !== USER_ROLES.ADMIN) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -129,21 +115,23 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <Layout>
-                <Routes>
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/students" element={<Students />} />
-                  <Route path="/input" element={<CombinedInput />} />
-                  <Route path="/sync" element={<Sync />} />
-                  <Route 
-                    path="/admin" 
-                    element={
-                      <AdminRoute>
-                        <Admin />
-                      </AdminRoute>
-                    } 
-                  />
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                </Routes>
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Routes>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/students" element={<Students />} />
+                    <Route path="/input" element={<CombinedInput />} />
+                    <Route path="/sync" element={<Sync />} />
+                    <Route
+                      path="/admin"
+                      element={
+                        <AdminRoute>
+                          <Admin />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  </Routes>
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
