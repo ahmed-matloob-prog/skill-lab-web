@@ -3,46 +3,47 @@ import FirebaseUserService from './firebaseUserService';
 import FirebasePasswordService from './firebasePasswordService';
 import { hashPassword, verifyPassword, isBcryptHash } from '../utils/passwordUtils';
 import { logger } from '../utils/logger';
+import { STORAGE_KEYS, USER_ROLES, DEFAULT_CREDENTIALS, DEFAULT_USER_IDS, DEFAULT_GROUP_IDS } from '../constants';
 
 // Production users data - Admin user and demo trainer accounts
 const productionUsers: User[] = [
   {
-    id: 'admin-1',
-    username: 'admin',
-    email: 'admin@skilllab.com',
-    role: 'admin',
+    id: DEFAULT_USER_IDS.ADMIN,
+    username: DEFAULT_CREDENTIALS.ADMIN.USERNAME,
+    email: DEFAULT_CREDENTIALS.ADMIN.EMAIL,
+    role: USER_ROLES.ADMIN,
     isActive: true,
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString(),
   },
   {
-    id: 'trainer-1',
+    id: DEFAULT_USER_IDS.TRAINER_1,
     username: 'trainer1',
-    email: 'trainer1@skilllab.com',
-    role: 'trainer',
-    assignedGroups: ['group-1', 'group-2', 'group-3'],
+    email: `trainer1${DEFAULT_CREDENTIALS.TRAINER.EMAIL_DOMAIN}`,
+    role: USER_ROLES.TRAINER,
+    assignedGroups: [DEFAULT_GROUP_IDS[0], DEFAULT_GROUP_IDS[1], DEFAULT_GROUP_IDS[2]],
     assignedYears: [1, 2],
     isActive: true,
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString(),
   },
   {
-    id: 'trainer-2',
+    id: DEFAULT_USER_IDS.TRAINER_2,
     username: 'trainer2',
-    email: 'trainer2@skilllab.com',
-    role: 'trainer',
-    assignedGroups: ['group-4', 'group-5', 'group-6'],
+    email: `trainer2${DEFAULT_CREDENTIALS.TRAINER.EMAIL_DOMAIN}`,
+    role: USER_ROLES.TRAINER,
+    assignedGroups: [DEFAULT_GROUP_IDS[3], DEFAULT_GROUP_IDS[4], DEFAULT_GROUP_IDS[5]],
     assignedYears: [2, 3],
     isActive: true,
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString(),
   },
   {
-    id: 'trainer-3',
+    id: DEFAULT_USER_IDS.TRAINER_3,
     username: 'trainer3',
-    email: 'trainer3@skilllab.com',
-    role: 'trainer',
-    assignedGroups: ['group-7', 'group-8', 'group-9'],
+    email: `trainer3${DEFAULT_CREDENTIALS.TRAINER.EMAIL_DOMAIN}`,
+    role: USER_ROLES.TRAINER,
+    assignedGroups: [DEFAULT_GROUP_IDS[6], DEFAULT_GROUP_IDS[7], DEFAULT_GROUP_IDS[8]],
     assignedYears: [3, 4],
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -53,17 +54,17 @@ const productionUsers: User[] = [
 // Default passwords - will be hashed on first use
 // These are only used for initial setup
 const defaultPlaintextPasswords: { [username: string]: string } = {
-  'admin': 'admin123',
-  'trainer1': 'trainer123',
-  'trainer2': 'trainer123',
-  'trainer3': 'trainer123',
+  [DEFAULT_CREDENTIALS.ADMIN.USERNAME]: DEFAULT_CREDENTIALS.ADMIN.PASSWORD,
+  'trainer1': DEFAULT_CREDENTIALS.TRAINER.PASSWORD,
+  'trainer2': DEFAULT_CREDENTIALS.TRAINER.PASSWORD,
+  'trainer3': DEFAULT_CREDENTIALS.TRAINER.PASSWORD,
 };
 
 class AuthService {
   private currentUser: User | null = null;
-  private usersKey = 'users';
-  private currentUserKey = 'currentUser';
-  private passwordsKey = 'userPasswords';
+  private usersKey = STORAGE_KEYS.USERS;
+  private currentUserKey = STORAGE_KEYS.CURRENT_USER;
+  private passwordsKey = STORAGE_KEYS.USER_PASSWORDS;
   private initialized: Promise<void>;
 
   constructor() {
@@ -521,7 +522,7 @@ class AuthService {
     }
 
     // Don't allow deleting the admin user
-    if (user.role === 'admin' && user.username === 'admin') {
+    if (user.role === USER_ROLES.ADMIN && user.username === DEFAULT_CREDENTIALS.ADMIN.USERNAME) {
       throw new Error('Cannot delete the admin user');
     }
 

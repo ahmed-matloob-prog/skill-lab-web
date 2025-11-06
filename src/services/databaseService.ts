@@ -1,11 +1,12 @@
 import { Student, Group, AttendanceRecord, AssessmentRecord } from '../types';
 import { logger } from '../utils/logger';
+import { STORAGE_KEYS } from '../constants';
 
 class DatabaseService {
-  private studentsKey = 'students';
-  private groupsKey = 'groups';
-  private attendanceKey = 'attendance';
-  private assessmentsKey = 'assessments';
+  private studentsKey = STORAGE_KEYS.STUDENTS;
+  private groupsKey = STORAGE_KEYS.GROUPS;
+  private attendanceKey = STORAGE_KEYS.ATTENDANCE;
+  private assessmentsKey = STORAGE_KEYS.ASSESSMENTS;
 
   async initDatabase(): Promise<void> {
     try {

@@ -32,6 +32,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { USER_ROLES } from '../constants';
 
 const drawerWidth = 240;
 
@@ -73,7 +74,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   ];
 
   // Add admin-only menu items
-  if (user?.role === 'admin') {
+  if (user?.role === USER_ROLES.ADMIN) {
     menuItems.push(
       { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' }
     );

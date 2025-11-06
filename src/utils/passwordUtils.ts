@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { logger } from './logger';
+import { PASSWORD_RULES } from '../constants';
 
 /**
  * Hash a plaintext password using bcrypt
@@ -7,8 +8,7 @@ import { logger } from './logger';
  * @returns Promise<string> - The hashed password
  */
 export const hashPassword = async (password: string): Promise<string> => {
-  const saltRounds = 10; // Cost factor - higher = more secure but slower
-  return await bcrypt.hash(password, saltRounds);
+  return await bcrypt.hash(password, PASSWORD_RULES.BCRYPT_SALT_ROUNDS);
 };
 
 /**
