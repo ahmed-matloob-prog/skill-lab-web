@@ -33,7 +33,7 @@ import {
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
-import { exportSimplifiedReportToExcel } from '../utils/excelUtils';
+import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts } from '../utils/excelUtils';
 import { Student } from '../types';
 
 const AdminReport: React.FC = () => {
@@ -42,6 +42,7 @@ const AdminReport: React.FC = () => {
   
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
+  const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [reportData, setReportData] = useState<any[]>([]);
   const [loadingReport, setLoadingReport] = useState(false);
   const [summaryStats, setSummaryStats] = useState({
@@ -52,6 +53,9 @@ const AdminReport: React.FC = () => {
     averageAttendanceRate: 0,
     averageScore: 0,
   });
+
+  // Available units for Years 2 and 3
+  const units = ['MSK', 'HEM', 'CVS', 'Resp', 'GIT', 'GUT', 'Neuro', 'END'];
 
   // Filter students based on selected filters
   const filteredStudents = students.filter(student => {
@@ -161,6 +165,30 @@ const AdminReport: React.FC = () => {
     }
   };
 
+  const handleExportUnitWeeklyPerformance = () => {
+    try {
+      if (!selectedUnit) {
+        logger.warn('Please select a unit first');
+        return;
+      }
+
+      if (selectedYear === 'all') {
+        logger.warn('Please select a specific year (2 or 3) for unit reports');
+        return;
+      }
+
+      exportUnitWeeklyPerformanceWithTrendsAndCharts(
+        selectedUnit,
+        selectedYear as number,
+        assessments,
+        students,
+        groups
+      );
+    } catch (error) {
+      logger.error('Unit export failed:', error);
+    }
+  };
+
   useEffect(() => {
     if (selectedYear !== 'all' || selectedGroup !== 'all') {
       generateGrandReport();
@@ -257,6 +285,58 @@ const AdminReport: React.FC = () => {
           </Grid>
         </CardContent>
       </Card>
+
+      {/* Unit Weekly Performance Export */}
+      {(selectedYear === 2 || selectedYear === 3) && (
+        <Card sx={{ mb: 3, bgcolor: '#f0f7ff' }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+              <TrendingUp sx={{ mr: 1 }} />
+              Unit Weekly Performance Report
+            </Typography>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Export detailed weekly performance with trends, statistics, and visual dashboard for specific units
+            </Typography>
+            <Divider sx={{ my: 2 }} />
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Select Unit</InputLabel>
+                  <Select
+                    value={selectedUnit}
+                    label="Select Unit"
+                    onChange={(e) => setSelectedUnit(e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>Select a unit</em>
+                    </MenuItem>
+                    {units.map(unit => (
+                      <MenuItem key={unit} value={unit}>{unit}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<BarChart />}
+                  onClick={handleExportUnitWeeklyPerformance}
+                  disabled={!selectedUnit || loadingReport}
+                  fullWidth
+                >
+                  Export Unit Report
+                </Button>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Alert severity="info" sx={{ py: 0.5 }}>
+                  Includes: 4 sheets (Details, Weekly Summary, Statistics, Charts)
+                </Alert>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedYear === 'all' && selectedGroup === 'all' ? (
         <Alert severity="info">

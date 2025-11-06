@@ -551,8 +551,558 @@ export const exportSimplifiedReportToExcel = (
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
   const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   
-  const fileName = year ? 
+  const fileName = year ?
     `year_${year}_report_${new Date().toISOString().split('T')[0]}.xlsx` :
     `student_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+  saveAs(data, fileName);
+};
+
+// Unit Weekly Performance Export with Trends and Visual Dashboard
+// Option 3: Combined View with Trends (3 sheets)
+// Option 4: Visual Dashboard with charts
+export const exportUnitWeeklyPerformanceWithTrendsAndCharts = (
+  unit: string,
+  year: number,
+  assessments: AssessmentRecord[],
+  students: Student[],
+  groups: Group[]
+): void => {
+  const groupMap = new Map(groups.map(g => [g.id, g.name]));
+
+  // Filter for specific unit and year
+  const unitStudents = students.filter(s =>
+    s.unit === unit && s.year === year
+  );
+
+  const unitAssessments = assessments.filter(a =>
+    a.year === year &&
+    unitStudents.some(s => s.id === a.studentId)
+  );
+
+  // Get date range
+  const assessmentDates = unitAssessments.map(a => new Date(a.date));
+  const minDate = assessmentDates.length > 0
+    ? new Date(Math.min(...assessmentDates.map(d => d.getTime())))
+    : new Date();
+  const maxDate = assessmentDates.length > 0
+    ? new Date(Math.max(...assessmentDates.map(d => d.getTime())))
+    : new Date();
+
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const dateRange = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+  const workbook = XLSX.utils.book_new();
+
+  // ============= SHEET 1: Student Details with Weekly Scores =============
+  const studentDetailsData: any[] = [];
+
+  // Add header row with export info
+  studentDetailsData.push({
+    'Student Name': `Unit Weekly Performance Report`,
+    'Student ID': '',
+    'Group': '',
+    'Week 1': '',
+    'Week 2': '',
+    'Week 3': '',
+    'Week 4': '',
+    'Week 5': '',
+    'Week 6': '',
+    'Week 7': '',
+    'Week 8': '',
+    'Week 9': '',
+    'Week 10': '',
+    'Average Score': '',
+    'Trend': '',
+    'Performance': '',
+  });
+
+  studentDetailsData.push({
+    'Student Name': `Unit: ${unit}`,
+    'Student ID': `Year: ${year}`,
+    'Group': `Date Range: ${dateRange}`,
+    'Week 1': '',
+    'Week 2': '',
+    'Week 3': '',
+    'Week 4': '',
+    'Week 5': '',
+    'Week 6': '',
+    'Week 7': '',
+    'Week 8': '',
+    'Week 9': '',
+    'Week 10': '',
+    'Average Score': '',
+    'Trend': '',
+    'Performance': `Export Date: ${exportDate}`,
+  });
+
+  studentDetailsData.push({
+    'Student Name': '',
+    'Student ID': '',
+    'Group': '',
+    'Week 1': '',
+    'Week 2': '',
+    'Week 3': '',
+    'Week 4': '',
+    'Week 5': '',
+    'Week 6': '',
+    'Week 7': '',
+    'Week 8': '',
+    'Week 9': '',
+    'Week 10': '',
+    'Average Score': '',
+    'Trend': '',
+    'Performance': '',
+  });
+
+  unitStudents.forEach(student => {
+    const studentAssessments = unitAssessments
+      .filter(a => a.studentId === student.id)
+      .sort((a, b) => (a.week || 0) - (b.week || 0));
+
+    // Create week map with dates
+    const weekScores: { [key: number]: { score: number, date: string } } = {};
+    studentAssessments.forEach(assessment => {
+      if (assessment.week) {
+        const percentage = Math.round((assessment.score / assessment.maxScore) * 100);
+        weekScores[assessment.week] = {
+          score: percentage,
+          date: assessment.date
+        };
+      }
+    });
+
+    // Calculate average
+    const scores = Object.values(weekScores).map(w => w.score);
+    const average = scores.length > 0
+      ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+      : 0;
+
+    // Calculate trend
+    let trend = '→ Stable';
+    if (scores.length >= 3) {
+      const firstThird = scores.slice(0, Math.ceil(scores.length / 3));
+      const lastThird = scores.slice(-Math.ceil(scores.length / 3));
+      const firstAvg = firstThird.reduce((sum, s) => sum + s, 0) / firstThird.length;
+      const lastAvg = lastThird.reduce((sum, s) => sum + s, 0) / lastThird.length;
+
+      if (lastAvg > firstAvg + 5) trend = '↑ Rising';
+      else if (lastAvg < firstAvg - 5) trend = '↓ Falling';
+    }
+
+    // Performance status
+    let performance = 'N/A';
+    if (average >= 85) performance = 'Excellent';
+    else if (average >= 75) performance = 'Good';
+    else if (average >= 60) performance = 'Pass';
+    else if (average > 0) performance = 'Need Improvement';
+
+    const rowData: any = {
+      'Student Name': student.name,
+      'Student ID': student.studentId,
+      'Group': groupMap.get(student.groupId) || 'Unknown',
+    };
+
+    // Add weekly scores with dates as tooltips
+    for (let week = 1; week <= 10; week++) {
+      if (weekScores[week]) {
+        rowData[`Week ${week}`] = weekScores[week].score;
+      } else {
+        rowData[`Week ${week}`] = '';
+      }
+    }
+
+    rowData['Average Score'] = average;
+    rowData['Trend'] = trend;
+    rowData['Performance'] = performance;
+
+    studentDetailsData.push(rowData);
+  });
+
+  const sheet1 = XLSX.utils.json_to_sheet(studentDetailsData);
+
+  // Auto-size columns for Sheet 1
+  sheet1['!cols'] = [
+    { wch: 25 }, // Student Name
+    { wch: 15 }, // Student ID
+    { wch: 15 }, // Group
+    { wch: 10 }, // Week 1
+    { wch: 10 }, // Week 2
+    { wch: 10 }, // Week 3
+    { wch: 10 }, // Week 4
+    { wch: 10 }, // Week 5
+    { wch: 10 }, // Week 6
+    { wch: 10 }, // Week 7
+    { wch: 10 }, // Week 8
+    { wch: 10 }, // Week 9
+    { wch: 10 }, // Week 10
+    { wch: 15 }, // Average Score
+    { wch: 12 }, // Trend
+    { wch: 18 }, // Performance
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet1, 'Student Details');
+
+  // ============= SHEET 2: Weekly Summary =============
+  const weeklySummaryData: any[] = [];
+
+  // Header with info
+  weeklySummaryData.push({
+    'Week': `Unit: ${unit} | Year: ${year}`,
+    'Date Range': `Period: ${dateRange}`,
+    'Students Assessed': '',
+    'Average Score': '',
+    'Highest Score': '',
+    'Lowest Score': '',
+    'Pass Rate (≥60%)': '',
+    'Excellent Rate (≥85%)': `Export: ${exportDate}`,
+  });
+
+  weeklySummaryData.push({
+    'Week': '',
+    'Date Range': '',
+    'Students Assessed': '',
+    'Average Score': '',
+    'Highest Score': '',
+    'Lowest Score': '',
+    'Pass Rate (≥60%)': '',
+    'Excellent Rate (≥85%)': '',
+  });
+
+  // Calculate weekly statistics
+  for (let week = 1; week <= 10; week++) {
+    const weekAssessments = unitAssessments.filter(a => a.week === week);
+
+    if (weekAssessments.length > 0) {
+      const percentages = weekAssessments.map(a =>
+        Math.round((a.score / a.maxScore) * 100)
+      );
+
+      const average = Math.round(
+        percentages.reduce((sum, p) => sum + p, 0) / percentages.length
+      );
+      const highest = Math.max(...percentages);
+      const lowest = Math.min(...percentages);
+      const passCount = percentages.filter(p => p >= 60).length;
+      const excellentCount = percentages.filter(p => p >= 85).length;
+      const passRate = Math.round((passCount / percentages.length) * 100);
+      const excellentRate = Math.round((excellentCount / percentages.length) * 100);
+
+      // Get date range for this week
+      const weekDates = weekAssessments.map(a => new Date(a.date));
+      const weekMinDate = new Date(Math.min(...weekDates.map(d => d.getTime())));
+      const weekMaxDate = new Date(Math.max(...weekDates.map(d => d.getTime())));
+      const weekDateRange = weekMinDate.getTime() === weekMaxDate.getTime()
+        ? weekMinDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : `${weekMinDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekMaxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+      weeklySummaryData.push({
+        'Week': `Week ${week}`,
+        'Date Range': weekDateRange,
+        'Students Assessed': weekAssessments.length,
+        'Average Score': average,
+        'Highest Score': highest,
+        'Lowest Score': lowest,
+        'Pass Rate (≥60%)': `${passRate}%`,
+        'Excellent Rate (≥85%)': `${excellentRate}%`,
+      });
+    }
+  }
+
+  const sheet2 = XLSX.utils.json_to_sheet(weeklySummaryData);
+
+  // Auto-size columns for Sheet 2
+  sheet2['!cols'] = [
+    { wch: 12 }, // Week
+    { wch: 20 }, // Date Range
+    { wch: 18 }, // Students Assessed
+    { wch: 15 }, // Average Score
+    { wch: 15 }, // Highest Score
+    { wch: 15 }, // Lowest Score
+    { wch: 18 }, // Pass Rate
+    { wch: 20 }, // Excellent Rate
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet2, 'Weekly Summary');
+
+  // ============= SHEET 3: Statistics & Analysis =============
+  const statsData: any[] = [];
+
+  // Header
+  statsData.push({
+    'Metric': `Statistics & Analysis - ${unit} (Year ${year})`,
+    'Value': `Export Date: ${exportDate}`,
+    'Details': `Period: ${dateRange}`,
+  });
+
+  statsData.push({
+    'Metric': '',
+    'Value': '',
+    'Details': '',
+  });
+
+  // Overall statistics
+  const allScores = unitAssessments.map(a =>
+    Math.round((a.score / a.maxScore) * 100)
+  );
+
+  if (allScores.length > 0) {
+    const overallAverage = Math.round(
+      allScores.reduce((sum, s) => sum + s, 0) / allScores.length
+    );
+    const overallHighest = Math.max(...allScores);
+    const overallLowest = Math.min(...allScores);
+    const totalPass = allScores.filter(s => s >= 60).length;
+    const totalExcellent = allScores.filter(s => s >= 85).length;
+    const overallPassRate = Math.round((totalPass / allScores.length) * 100);
+    const overallExcellentRate = Math.round((totalExcellent / allScores.length) * 100);
+
+    statsData.push({ 'Metric': '=== Overall Performance ===', 'Value': '', 'Details': '' });
+    statsData.push({ 'Metric': 'Total Students', 'Value': unitStudents.length, 'Details': `Enrolled in ${unit}` });
+    statsData.push({ 'Metric': 'Total Assessments', 'Value': unitAssessments.length, 'Details': 'All weeks combined' });
+    statsData.push({ 'Metric': 'Overall Average Score', 'Value': `${overallAverage}%`, 'Details': 'Across all weeks' });
+    statsData.push({ 'Metric': 'Highest Score', 'Value': `${overallHighest}%`, 'Details': 'Best performance' });
+    statsData.push({ 'Metric': 'Lowest Score', 'Value': `${overallLowest}%`, 'Details': 'Needs attention' });
+    statsData.push({ 'Metric': 'Pass Rate (≥60%)', 'Value': `${overallPassRate}%`, 'Details': `${totalPass} of ${allScores.length} assessments` });
+    statsData.push({ 'Metric': 'Excellent Rate (≥85%)', 'Value': `${overallExcellentRate}%`, 'Details': `${totalExcellent} of ${allScores.length} assessments` });
+
+    statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+    statsData.push({ 'Metric': '=== Performance Distribution ===', 'Value': '', 'Details': '' });
+
+    const excellentCount = allScores.filter(s => s >= 85).length;
+    const goodCount = allScores.filter(s => s >= 75 && s < 85).length;
+    const passCount = allScores.filter(s => s >= 60 && s < 75).length;
+    const needImprovementCount = allScores.filter(s => s < 60).length;
+
+    statsData.push({
+      'Metric': 'Excellent (≥85%)',
+      'Value': excellentCount,
+      'Details': `${Math.round((excellentCount / allScores.length) * 100)}% of total`
+    });
+    statsData.push({
+      'Metric': 'Good (75-84%)',
+      'Value': goodCount,
+      'Details': `${Math.round((goodCount / allScores.length) * 100)}% of total`
+    });
+    statsData.push({
+      'Metric': 'Pass (60-74%)',
+      'Value': passCount,
+      'Details': `${Math.round((passCount / allScores.length) * 100)}% of total`
+    });
+    statsData.push({
+      'Metric': 'Need Improvement (<60%)',
+      'Value': needImprovementCount,
+      'Details': `${Math.round((needImprovementCount / allScores.length) * 100)}% of total`
+    });
+
+    // Top performers
+    statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+    statsData.push({ 'Metric': '=== Top Performers ===', 'Value': '', 'Details': 'Students with highest averages' });
+
+    const studentAverages = unitStudents.map(student => {
+      const studentAssessments = unitAssessments.filter(a => a.studentId === student.id);
+      const scores = studentAssessments.map(a => Math.round((a.score / a.maxScore) * 100));
+      const average = scores.length > 0
+        ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+        : 0;
+      return { name: student.name, average, assessmentCount: scores.length };
+    }).sort((a, b) => b.average - a.average);
+
+    studentAverages.slice(0, 5).forEach((student, index) => {
+      statsData.push({
+        'Metric': `${index + 1}. ${student.name}`,
+        'Value': `${student.average}%`,
+        'Details': `${student.assessmentCount} assessments`,
+      });
+    });
+
+    // Students needing attention
+    statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+    statsData.push({ 'Metric': '=== Students Needing Attention ===', 'Value': '', 'Details': 'Average below 60%' });
+
+    const needAttention = studentAverages.filter(s => s.average < 60 && s.assessmentCount > 0);
+    if (needAttention.length > 0) {
+      needAttention.forEach((student, index) => {
+        statsData.push({
+          'Metric': `${index + 1}. ${student.name}`,
+          'Value': `${student.average}%`,
+          'Details': `${student.assessmentCount} assessments`,
+        });
+      });
+    } else {
+      statsData.push({
+        'Metric': 'All students performing well!',
+        'Value': '✓',
+        'Details': 'No students below 60% average',
+      });
+    }
+  } else {
+    statsData.push({
+      'Metric': 'No assessment data available',
+      'Value': 'N/A',
+      'Details': `No assessments found for ${unit} Year ${year}`,
+    });
+  }
+
+  const sheet3 = XLSX.utils.json_to_sheet(statsData);
+
+  // Auto-size columns for Sheet 3
+  sheet3['!cols'] = [
+    { wch: 35 }, // Metric
+    { wch: 15 }, // Value
+    { wch: 35 }, // Details
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet3, 'Statistics & Analysis');
+
+  // ============= SHEET 4: Visual Dashboard Data =============
+  // This sheet contains data formatted for easy chart creation
+  const chartData: any[] = [];
+
+  chartData.push({
+    'Chart Type': `Visual Dashboard - ${unit} (Year ${year})`,
+    'Data': `Export: ${exportDate}`,
+    'Notes': `Period: ${dateRange}`,
+  });
+
+  chartData.push({
+    'Chart Type': '',
+    'Data': '',
+    'Notes': '',
+  });
+
+  chartData.push({
+    'Chart Type': '=== Weekly Average Trend (Line Chart) ===',
+    'Data': '',
+    'Notes': 'Select Week and Average columns to create line chart',
+  });
+
+  chartData.push({
+    'Chart Type': 'Week',
+    'Data': 'Average Score',
+    'Notes': 'Students Assessed',
+  });
+
+  for (let week = 1; week <= 10; week++) {
+    const weekAssessments = unitAssessments.filter(a => a.week === week);
+    if (weekAssessments.length > 0) {
+      const percentages = weekAssessments.map(a =>
+        Math.round((a.score / a.maxScore) * 100)
+      );
+      const average = Math.round(
+        percentages.reduce((sum, p) => sum + p, 0) / percentages.length
+      );
+
+      chartData.push({
+        'Chart Type': `Week ${week}`,
+        'Data': average,
+        'Notes': weekAssessments.length,
+      });
+    }
+  }
+
+  chartData.push({
+    'Chart Type': '',
+    'Data': '',
+    'Notes': '',
+  });
+
+  chartData.push({
+    'Chart Type': '=== Performance Distribution (Pie Chart) ===',
+    'Data': '',
+    'Notes': 'Select Category and Count columns to create pie chart',
+  });
+
+  chartData.push({
+    'Chart Type': 'Category',
+    'Data': 'Count',
+    'Notes': 'Percentage',
+  });
+
+  if (allScores.length > 0) {
+    const excellentCount = allScores.filter(s => s >= 85).length;
+    const goodCount = allScores.filter(s => s >= 75 && s < 85).length;
+    const passCount = allScores.filter(s => s >= 60 && s < 75).length;
+    const needImprovementCount = allScores.filter(s => s < 60).length;
+
+    chartData.push({
+      'Chart Type': 'Excellent (≥85%)',
+      'Data': excellentCount,
+      'Notes': `${Math.round((excellentCount / allScores.length) * 100)}%`,
+    });
+    chartData.push({
+      'Chart Type': 'Good (75-84%)',
+      'Data': goodCount,
+      'Notes': `${Math.round((goodCount / allScores.length) * 100)}%`,
+    });
+    chartData.push({
+      'Chart Type': 'Pass (60-74%)',
+      'Data': passCount,
+      'Notes': `${Math.round((passCount / allScores.length) * 100)}%`,
+    });
+    chartData.push({
+      'Chart Type': 'Need Improvement (<60%)',
+      'Data': needImprovementCount,
+      'Notes': `${Math.round((needImprovementCount / allScores.length) * 100)}%`,
+    });
+  }
+
+  chartData.push({
+    'Chart Type': '',
+    'Data': '',
+    'Notes': '',
+  });
+
+  chartData.push({
+    'Chart Type': '=== Top 10 Students (Bar Chart) ===',
+    'Data': '',
+    'Notes': 'Select Student and Average columns to create bar chart',
+  });
+
+  chartData.push({
+    'Chart Type': 'Student',
+    'Data': 'Average Score',
+    'Notes': 'Assessments',
+  });
+
+  if (allScores.length > 0) {
+    const studentAverages = unitStudents.map(student => {
+      const studentAssessments = unitAssessments.filter(a => a.studentId === student.id);
+      const scores = studentAssessments.map(a => Math.round((a.score / a.maxScore) * 100));
+      const average = scores.length > 0
+        ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+        : 0;
+      return { name: student.name, average, assessmentCount: scores.length };
+    }).sort((a, b) => b.average - a.average);
+
+    studentAverages.slice(0, 10).forEach(student => {
+      chartData.push({
+        'Chart Type': student.name,
+        'Data': student.average,
+        'Notes': student.assessmentCount,
+      });
+    });
+  }
+
+  const sheet4 = XLSX.utils.json_to_sheet(chartData);
+
+  // Auto-size columns for Sheet 4
+  sheet4['!cols'] = [
+    { wch: 35 }, // Chart Type
+    { wch: 18 }, // Data
+    { wch: 30 }, // Notes
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet4, 'Visual Dashboard');
+
+  // Generate Excel file
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const fileName = `${unit}_Year${year}_Weekly_Performance_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(data, fileName);
 };
