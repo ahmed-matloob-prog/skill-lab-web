@@ -434,20 +434,17 @@ export const downloadStudentTemplate = (): void => {
     {
       'Student Name': 'John Doe',
       'Year': 1,
-      'Group': 'Group1',
-      'Unit': '',
+      'Group': 'Section A',
     },
     {
       'Student Name': 'Jane Smith',
       'Year': 2,
-      'Group': 'Group6',
-      'Unit': 'MSK',
+      'Group': 'Morning Group',
     },
     {
       'Student Name': 'Ahmed Ali',
       'Year': 3,
-      'Group': 'Group10',
-      'Unit': 'CVS',
+      'Group': 'Advanced Class',
     },
   ];
 
@@ -460,10 +457,9 @@ export const downloadStudentTemplate = (): void => {
     { 'Field': 'Student Name', 'Required': 'Yes', 'Description': 'Full name of the student' },
     { 'Field': 'Year', 'Required': 'Yes', 'Description': 'Academic year: 1, 2, 3, 4, 5, or 6' },
     { 'Field': 'Group', 'Required': 'Yes', 'Description': 'Group name - must match existing group name for the selected year (created in Admin Panel → Group Management)' },
-    { 'Field': 'Unit', 'Required': 'Only for Year 2/3', 'Description': 'MSK, HEM, CVS, Resp, GIT, GUT, Neuro, or END (leave empty for other years)' },
     { 'Field': '', 'Required': '', 'Description': '' },
     { 'Field': 'Note', 'Required': '', 'Description': 'Student ID will be auto-generated' },
-    { 'Field': 'Note', 'Required': '', 'Description': 'Email and Phone fields removed - add manually if needed' },
+    { 'Field': 'Note', 'Required': '', 'Description': 'Units are assigned when recording attendance/assessments (students rotate through units)' },
     { 'Field': 'Note', 'Required': '', 'Description': 'Make sure groups are created in Admin Panel before importing students' },
   ];
 
@@ -474,8 +470,7 @@ export const downloadStudentTemplate = (): void => {
   worksheet['!cols'] = [
     { wch: 25 }, // Student Name
     { wch: 8 },  // Year
-    { wch: 12 }, // Group
-    { wch: 10 }, // Unit
+    { wch: 20 }, // Group
   ];
 
   instructionsSheet['!cols'] = [

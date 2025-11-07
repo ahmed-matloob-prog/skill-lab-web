@@ -56,7 +56,6 @@ const Students: React.FC = () => {
     name: '',
     year: 1,
     groupId: '',
-    unit: '',
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -117,26 +116,6 @@ const Students: React.FC = () => {
   // Filter groups by the selected year in the form
   const filteredGroups = accessibleGroups.filter(group => group.year === formData.year);
 
-  // Unit options based on year
-  const getUnitOptions = (year: number) => {
-    if (year === 2) {
-      return [
-        { value: 'MSK', label: 'MSK' },
-        { value: 'HEM', label: 'HEM' },
-        { value: 'CVS', label: 'CVS' },
-        { value: 'Resp', label: 'Resp' },
-      ];
-    } else if (year === 3) {
-      return [
-        { value: 'GIT', label: 'GIT' },
-        { value: 'GUT', label: 'GUT' },
-        { value: 'Neuro', label: 'Neuro' },
-        { value: 'END', label: 'END' },
-      ];
-    }
-    return [];
-  };
-
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
     return group ? group.name : 'Unknown Group';
@@ -149,7 +128,6 @@ const Students: React.FC = () => {
         name: student.name,
         year: student.year,
         groupId: student.groupId,
-        unit: student.unit || '',
       });
     } else {
       setEditingStudent(null);
@@ -157,7 +135,6 @@ const Students: React.FC = () => {
         name: '',
         year: 1,
         groupId: '',
-        unit: '',
       });
     }
     setError(null);
@@ -201,7 +178,6 @@ const Students: React.FC = () => {
         studentId: editingStudent ? editingStudent.studentId : `ST${Date.now()}`, // Auto-generate for new students
         year: formData.year,
         groupId: formData.groupId,
-        unit: formData.unit.trim() || undefined,
       };
 
       if (editingStudent) {
@@ -573,7 +549,7 @@ const Students: React.FC = () => {
                 <Select
                   value={formData.year}
                   label="Year *"
-                  onChange={(e) => setFormData({ ...formData, year: e.target.value as number, unit: '', groupId: '' })}
+                  onChange={(e) => setFormData({ ...formData, year: e.target.value as number, groupId: '' })}
                 >
                   {[1, 2, 3, 4, 5, 6].map(year => (
                     <MenuItem key={year} value={year}>Year {year}</MenuItem>
@@ -610,26 +586,10 @@ const Students: React.FC = () => {
                 )}
               </FormControl>
             </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Unit</InputLabel>
-                <Select
-                  value={formData.unit}
-                  label="Unit"
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  disabled={formData.year !== 2 && formData.year !== 3}
-                >
-                  <MenuItem value="">No Unit</MenuItem>
-                  {getUnitOptions(formData.year).map(unit => (
-                    <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
             {!editingStudent && (
               <Grid item xs={12}>
                 <Alert severity="info">
-                  Student ID will be auto-generated. Email and Phone can be added later if needed.
+                  Student ID will be auto-generated. Units are assigned when recording attendance/assessments.
                 </Alert>
               </Grid>
             )}
