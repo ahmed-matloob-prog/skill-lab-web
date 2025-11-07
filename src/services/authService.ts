@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword, isBcryptHash } from '../utils/passwordUti
 import { logger } from '../utils/logger';
 import { STORAGE_KEYS, USER_ROLES, DEFAULT_CREDENTIALS, DEFAULT_USER_IDS, DEFAULT_GROUP_IDS } from '../constants';
 
-// Production users data - Admin user and demo trainer accounts
+// Production users data - Keep only default admin as fallback
 const productionUsers: User[] = [
   {
     id: DEFAULT_USER_IDS.ADMIN,
@@ -16,48 +16,14 @@ const productionUsers: User[] = [
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString(),
   },
-  {
-    id: DEFAULT_USER_IDS.TRAINER_1,
-    username: 'trainer1',
-    email: `trainer1${DEFAULT_CREDENTIALS.TRAINER.EMAIL_DOMAIN}`,
-    role: USER_ROLES.TRAINER,
-    assignedGroups: [DEFAULT_GROUP_IDS[0], DEFAULT_GROUP_IDS[1], DEFAULT_GROUP_IDS[2]],
-    assignedYears: [1, 2],
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString(),
-  },
-  {
-    id: DEFAULT_USER_IDS.TRAINER_2,
-    username: 'trainer2',
-    email: `trainer2${DEFAULT_CREDENTIALS.TRAINER.EMAIL_DOMAIN}`,
-    role: USER_ROLES.TRAINER,
-    assignedGroups: [DEFAULT_GROUP_IDS[3], DEFAULT_GROUP_IDS[4], DEFAULT_GROUP_IDS[5]],
-    assignedYears: [2, 3],
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString(),
-  },
-  {
-    id: DEFAULT_USER_IDS.TRAINER_3,
-    username: 'trainer3',
-    email: `trainer3${DEFAULT_CREDENTIALS.TRAINER.EMAIL_DOMAIN}`,
-    role: USER_ROLES.TRAINER,
-    assignedGroups: [DEFAULT_GROUP_IDS[6], DEFAULT_GROUP_IDS[7], DEFAULT_GROUP_IDS[8]],
-    assignedYears: [3, 4],
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString(),
-  },
+  // Demo trainers removed - create your own trainers through Admin Panel
 ];
 
 // Default passwords - will be hashed on first use
 // These are only used for initial setup
 const defaultPlaintextPasswords: { [username: string]: string } = {
   [DEFAULT_CREDENTIALS.ADMIN.USERNAME]: DEFAULT_CREDENTIALS.ADMIN.PASSWORD,
-  'trainer1': DEFAULT_CREDENTIALS.TRAINER.PASSWORD,
-  'trainer2': DEFAULT_CREDENTIALS.TRAINER.PASSWORD,
-  'trainer3': DEFAULT_CREDENTIALS.TRAINER.PASSWORD,
+  // Demo trainer passwords removed
 };
 
 class AuthService {

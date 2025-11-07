@@ -477,15 +477,20 @@ const Students: React.FC = () => {
 
       {/* Students Table */}
       <Card>
-        <Box sx={{ height: 400, width: '100%' }}>
+        <CardContent>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Showing {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''}
+          </Typography>
+        </CardContent>
+        <Box sx={{ height: 600, width: '100%' }}>
           <DataGrid
             rows={filteredStudents.map(student => ({
               ...student,
               id: student.id || `student-${Date.now()}-${Math.random()}`
             }))}
             columns={columns}
-            pageSize={10}
-            rowsPerPageOptions={[10, 25, 50]}
+            pageSize={50}
+            rowsPerPageOptions={[25, 50, 100]}
             disableSelectionOnClick
             getRowId={(row) => row.id}
             onRowClick={(params) => {

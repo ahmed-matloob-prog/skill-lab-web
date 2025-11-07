@@ -16,6 +16,8 @@ import {
   Menu,
   MenuItem,
   Divider,
+  Chip,
+  Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -28,9 +30,14 @@ import {
   Logout,
   Dashboard,
   Language,
+  CloudDone,
+  CloudOff,
+  CloudSync,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useDatabase } from '../contexts/DatabaseContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { USER_ROLES } from '../constants';
 
@@ -44,9 +51,53 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const { user, logout } = useAuth();
+  const { syncStatus, pendingSyncCount } = useDatabase();
   const { language, setLanguage, t, isRTL } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Sync status configuration
+  const getSyncConfig = () => {
+    switch (syncStatus) {
+      case 'online':
+        return {
+          icon: <CloudDone fontSize="small" />,
+          label: 'Synced',
+          color: 'success' as const,
+          tooltip: 'All data synced to cloud'
+        };
+      case 'syncing':
+        return {
+          icon: <CloudSync fontSize="small" />,
+          label: `Syncing (${pendingSyncCount})`,
+          color: 'info' as const,
+          tooltip: `${pendingSyncCount} items pending sync`
+        };
+      case 'offline':
+        return {
+          icon: <CloudOff fontSize="small" />,
+          label: 'Offline',
+          color: 'warning' as const,
+          tooltip: 'Working offline - changes will sync when online'
+        };
+      case 'error':
+        return {
+          icon: <ErrorIcon fontSize="small" />,
+          label: 'Error',
+          color: 'error' as const,
+          tooltip: 'Sync error - please check your connection'
+        };
+      default:
+        return {
+          icon: <CloudOff fontSize="small" />,
+          label: 'Offline',
+          color: 'default' as const,
+          tooltip: 'Status unknown'
+        };
+    }
+  };
+
+  const syncConfig = getSyncConfig();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -130,13 +181,49 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             {menuItems.find(item => item.path === location.pathname)?.text || 'Student Attendance'}
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Sync Status Indicator */}
+            <Tooltip title={syncConfig.tooltip} arrow>
+              <Chip
+                icon={syncConfig.icon}
+                label={syncConfig.label}
+                color={syncConfig.color}
+                size="small"
+                sx={{
+                  display: { xs: 'none', md: 'flex' },
+                  fontWeight: 500,
+                  '& .MuiChip-icon': {
+                    animation: syncStatus === 'syncing' ? 'spin 2s linear infinite' : 'none'
+                  },
+                  '@keyframes spin': {
+                    '0%': { transform: 'rotate(0deg)' },
+                    '100%': { transform: 'rotate(360deg)' }
+                  }
+                }}
+              />
+            </Tooltip>
+
+            {/* Mobile sync indicator - icon only */}
+            <Tooltip title={syncConfig.tooltip} arrow>
+              <IconButton
+                size="small"
+                color="inherit"
+                sx={{
+                  display: { xs: 'flex', md: 'none' },
+                  '& svg': {
+                    animation: syncStatus === 'syncing' ? 'spin 2s linear infinite' : 'none'
+                  }
+                }}
+              >
+                {syncConfig.icon}
+              </IconButton>
+            </Tooltip>
+
             <IconButton
               size="large"
               aria-label="language switcher"
               onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
               color="inherit"
-              sx={{ mr: 1 }}
             >
               <Language />
             </IconButton>
