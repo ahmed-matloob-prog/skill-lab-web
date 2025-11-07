@@ -428,26 +428,26 @@ export const exportCombinedReportToExcel = (
   saveAs(data, fileName);
 };
 
-// Template Generation
+// Template Generation - Simplified to essential columns only
 export const downloadStudentTemplate = (): void => {
   const templateData = [
     {
       'Student Name': 'John Doe',
       'Year': 1,
       'Group': 'Group1',
-      'Student ID': 'ST001',
-      'Email': 'john.doe@example.com',
-      'Phone': '+1234567890',
-      'Unit': 'MSK',
+      'Unit': '',
     },
     {
       'Student Name': 'Jane Smith',
       'Year': 2,
       'Group': 'Group6',
-      'Student ID': 'ST002',
-      'Email': 'jane.smith@example.com',
-      'Phone': '+1234567891',
-      'Unit': 'HEM',
+      'Unit': 'MSK',
+    },
+    {
+      'Student Name': 'Ahmed Ali',
+      'Year': 3,
+      'Group': 'Group10',
+      'Unit': 'CVS',
     },
   ];
 
@@ -458,20 +458,34 @@ export const downloadStudentTemplate = (): void => {
   // Add instructions sheet
   const instructionsData = [
     { 'Field': 'Student Name', 'Required': 'Yes', 'Description': 'Full name of the student' },
-    { 'Field': 'Year', 'Required': 'Yes', 'Description': 'Academic year (1-6)' },
-    { 'Field': 'Group', 'Required': 'Yes', 'Description': 'Group name (Group1-Group30, available for all years)' },
-    { 'Field': 'Student ID', 'Required': 'No', 'Description': 'Unique student identifier (auto-generated if empty)' },
-    { 'Field': 'Email', 'Required': 'No', 'Description': 'Student email address' },
-    { 'Field': 'Phone', 'Required': 'No', 'Description': 'Student phone number' },
-    { 'Field': 'Unit', 'Required': 'No', 'Description': 'Unit for Year 2/3 students (MSK, HEM, CVS, Resp, GIT, GUT, Neuro, END)' },
+    { 'Field': 'Year', 'Required': 'Yes', 'Description': 'Academic year: 1, 2, 3, 4, 5, or 6' },
+    { 'Field': 'Group', 'Required': 'Yes', 'Description': 'Group name: Group1 to Group30' },
+    { 'Field': 'Unit', 'Required': 'Only for Year 2/3', 'Description': 'MSK, HEM, CVS, Resp, GIT, GUT, Neuro, or END (leave empty for other years)' },
+    { 'Field': '', 'Required': '', 'Description': '' },
+    { 'Field': 'Note', 'Required': '', 'Description': 'Student ID will be auto-generated' },
+    { 'Field': 'Note', 'Required': '', 'Description': 'Email and Phone fields removed - add manually if needed' },
   ];
 
   const instructionsSheet = XLSX.utils.json_to_sheet(instructionsData);
   XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions');
 
+  // Auto-size columns
+  worksheet['!cols'] = [
+    { wch: 25 }, // Student Name
+    { wch: 8 },  // Year
+    { wch: 12 }, // Group
+    { wch: 10 }, // Unit
+  ];
+
+  instructionsSheet['!cols'] = [
+    { wch: 20 }, // Field
+    { wch: 20 }, // Required
+    { wch: 60 }, // Description
+  ];
+
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
   const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  
+
   saveAs(data, 'student_import_template.xlsx');
 };
 

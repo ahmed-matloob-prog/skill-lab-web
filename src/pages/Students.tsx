@@ -39,7 +39,7 @@ import {
   downloadStudentTemplate
 } from '../utils/excelUtils';
 import DatabaseService from '../services/databaseService';
-import { sanitizeString, validateName, validateStudentId, validateEmail } from '../utils/validator';
+import { sanitizeString, validateName } from '../utils/validator';
 
 const Students: React.FC = () => {
   const { students, groups, addStudent, updateStudent, deleteStudent, refreshStudents, forceRefresh, loading } = useDatabase();
@@ -51,12 +51,9 @@ const Students: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
-  // Form state
+  // Form state - Simplified to essential fields only
   const [formData, setFormData] = useState({
     name: '',
-    studentId: '',
-    email: '',
-    phone: '',
     year: 1,
     groupId: '',
     unit: '',
@@ -150,9 +147,6 @@ const Students: React.FC = () => {
       setEditingStudent(student);
       setFormData({
         name: student.name,
-        studentId: student.studentId,
-        email: student.email || '',
-        phone: student.phone || '',
         year: student.year,
         groupId: student.groupId,
         unit: student.unit || '',
@@ -161,9 +155,6 @@ const Students: React.FC = () => {
       setEditingStudent(null);
       setFormData({
         name: '',
-        studentId: '',
-        email: '',
-        phone: '',
         year: 1,
         groupId: '',
         unit: '',
@@ -190,16 +181,6 @@ const Students: React.FC = () => {
       errors.name = 'Student name must be 2-100 characters and contain only letters and spaces';
     }
 
-    // Validate student ID (if provided)
-    if (formData.studentId.trim() && !validateStudentId(formData.studentId.trim())) {
-      errors.studentId = 'Student ID must contain only alphanumeric characters and hyphens';
-    }
-
-    // Validate email (if provided)
-    if (formData.email.trim() && !validateEmail(formData.email.trim())) {
-      errors.email = 'Please enter a valid email address';
-    }
-
     // Validate group selection
     if (!formData.groupId) {
       errors.groupId = 'Please select a group';
@@ -217,9 +198,7 @@ const Students: React.FC = () => {
     try {
       const studentData = {
         name: sanitizeString(formData.name.trim()),
-        studentId: formData.studentId.trim() || `ST${Date.now()}`,
-        email: formData.email.trim() ? sanitizeString(formData.email.trim()) : undefined,
-        phone: formData.phone.trim() ? sanitizeString(formData.phone.trim()) : undefined,
+        studentId: editingStudent ? editingStudent.studentId : `ST${Date.now()}`, // Auto-generate for new students
         year: formData.year,
         groupId: formData.groupId,
         unit: formData.unit.trim() || undefined,
@@ -576,7 +555,7 @@ const Students: React.FC = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Full Name *"
+                label="Student Name *"
                 value={formData.name}
                 onChange={(e) => {
                   setFormData({ ...formData, name: e.target.value });
@@ -585,22 +564,7 @@ const Students: React.FC = () => {
                   }
                 }}
                 error={!!validationErrors.name}
-                helperText={validationErrors.name}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Student ID"
-                value={formData.studentId}
-                onChange={(e) => {
-                  setFormData({ ...formData, studentId: e.target.value });
-                  if (validationErrors.studentId) {
-                    setValidationErrors({ ...validationErrors, studentId: '' });
-                  }
-                }}
-                error={!!validationErrors.studentId}
-                helperText={validationErrors.studentId || 'Auto-generated if empty'}
+                helperText={validationErrors.name || 'Full name of the student'}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -618,46 +582,6 @@ const Students: React.FC = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Unit</InputLabel>
-                <Select
-                  value={formData.unit}
-                  label="Unit"
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  disabled={formData.year !== 2 && formData.year !== 3}
-                >
-                  <MenuItem value="">No Unit</MenuItem>
-                  {getUnitOptions(formData.year).map(unit => (
-                    <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => {
-                  setFormData({ ...formData, email: e.target.value });
-                  if (validationErrors.email) {
-                    setValidationErrors({ ...validationErrors, email: '' });
-                  }
-                }}
-                error={!!validationErrors.email}
-                helperText={validationErrors.email}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12}>
               <FormControl fullWidth error={!!validationErrors.groupId}>
                 <InputLabel>Group *</InputLabel>
                 <Select
@@ -686,6 +610,29 @@ const Students: React.FC = () => {
                 )}
               </FormControl>
             </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Unit</InputLabel>
+                <Select
+                  value={formData.unit}
+                  label="Unit"
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  disabled={formData.year !== 2 && formData.year !== 3}
+                >
+                  <MenuItem value="">No Unit</MenuItem>
+                  {getUnitOptions(formData.year).map(unit => (
+                    <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            {!editingStudent && (
+              <Grid item xs={12}>
+                <Alert severity="info">
+                  Student ID will be auto-generated. Email and Phone can be added later if needed.
+                </Alert>
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>
