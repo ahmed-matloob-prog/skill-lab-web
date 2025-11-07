@@ -114,8 +114,8 @@ const Students: React.FC = () => {
     groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year }))
   });
 
-  // Groups are available for all years, so no need to filter by year
-  const filteredGroups = accessibleGroups;
+  // Filter groups by the selected year in the form
+  const filteredGroups = accessibleGroups.filter(group => group.year === formData.year);
 
   // Unit options based on year
   const getUnitOptions = (year: number) => {
@@ -573,7 +573,7 @@ const Students: React.FC = () => {
                 <Select
                   value={formData.year}
                   label="Year *"
-                  onChange={(e) => setFormData({ ...formData, year: e.target.value as number, unit: '' })}
+                  onChange={(e) => setFormData({ ...formData, year: e.target.value as number, unit: '', groupId: '' })}
                 >
                   {[1, 2, 3, 4, 5, 6].map(year => (
                     <MenuItem key={year} value={year}>Year {year}</MenuItem>

@@ -103,6 +103,7 @@ const Admin: React.FC = () => {
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [groupForm, setGroupForm] = useState({
     name: '',
+    year: 1,
     description: '',
   });
   
@@ -412,16 +413,19 @@ const Admin: React.FC = () => {
       setEditingGroup(group);
       setGroupForm({
         name: group.name,
+        year: group.year,
         description: group.description || '',
       });
     } else {
       setEditingGroup(null);
       setGroupForm({
         name: '',
+        year: 1,
         description: '',
       });
     }
     setError(null);
+    setValidationErrors({});
     setGroupDialogOpen(true);
   };
 
@@ -432,22 +436,40 @@ const Admin: React.FC = () => {
   };
 
   const handleSaveGroup = async () => {
+    const errors: { [key: string]: string } = {};
+
+    // Validate group name
     if (!groupForm.name.trim()) {
-      setError('Group name is required');
+      errors.name = 'Group name is required';
+    }
+
+    // Check for duplicate group name in the same year
+    const duplicateGroup = groups.find(g =>
+      g.name.toLowerCase() === groupForm.name.trim().toLowerCase() &&
+      g.year === groupForm.year &&
+      (!editingGroup || g.id !== editingGroup.id)
+    );
+
+    if (duplicateGroup) {
+      errors.name = `Group "${groupForm.name}" already exists for Year ${groupForm.year}`;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
       return;
     }
 
     try {
+      const groupData = {
+        name: sanitizeString(groupForm.name.trim()),
+        year: groupForm.year,
+        description: groupForm.description.trim() ? sanitizeString(groupForm.description.trim()) : undefined,
+      };
+
       if (editingGroup) {
-        await updateGroup(editingGroup.id, {
-          ...groupForm,
-          year: 1, // Groups are available for all years
-        });
+        await updateGroup(editingGroup.id, groupData);
       } else {
-        await addGroup({
-          ...groupForm,
-          year: 1, // Groups are available for all years
-        });
+        await addGroup(groupData);
       }
 
       handleCloseGroupDialog();
@@ -457,12 +479,24 @@ const Admin: React.FC = () => {
   };
 
   const handleDeleteGroup = async (groupId: string) => {
-    if (window.confirm('Are you sure you want to clear this group? This will remove all students, attendance, and assessment records from this group, but the group will remain available for future use.')) {
-      try {
-        await deleteGroup(groupId);
-      } catch (error) {
-        setError('Failed to clear group data');
+    const group = groups.find(g => g.id === groupId);
+    const studentsInGroup = students.filter(s => s.groupId === groupId);
+
+    if (studentsInGroup.length > 0) {
+      const confirmMessage = `This group has ${studentsInGroup.length} student(s). Deleting this group will also remove all students, attendance, and assessment records associated with it. Are you sure you want to delete "${group?.name}"?`;
+      if (!window.confirm(confirmMessage)) {
+        return;
       }
+    } else {
+      if (!window.confirm(`Are you sure you want to delete "${group?.name}"?`)) {
+        return;
+      }
+    }
+
+    try {
+      await deleteGroup(groupId);
+    } catch (error) {
+      setError('Failed to delete group');
     }
   };
 
@@ -687,24 +721,22 @@ const Admin: React.FC = () => {
       <TabPanel value={tabValue} index={2}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6">
-            Group Management ({groups.length})
+            Group Management ({groups.length} groups)
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              variant="outlined"
-              onClick={() => handleEnsureAllGroups()}
-            >
-              Ensure All Groups (1-30)
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => handleOpenGroupDialog()}
-            >
-              Add Group
-            </Button>
-          </Box>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => handleOpenGroupDialog()}
+          >
+            Add Group
+          </Button>
         </Box>
+
+        {groups.length === 0 && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            No groups created yet. Click "Add Group" to create your first group.
+          </Alert>
+        )}
 
         <TableContainer component={Paper}>
           <Table>
@@ -928,16 +960,36 @@ const Admin: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          
+
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={8}>
               <TextField
                 fullWidth
                 label="Group Name *"
                 value={groupForm.name}
-                onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                helperText="Groups are available for all years (1-6)"
+                onChange={(e) => {
+                  setGroupForm({ ...groupForm, name: e.target.value });
+                  if (validationErrors.name) {
+                    setValidationErrors({ ...validationErrors, name: '' });
+                  }
+                }}
+                error={!!validationErrors.name}
+                helperText={validationErrors.name || 'e.g., Section A, Morning Group, Advanced Class'}
               />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Year *</InputLabel>
+                <Select
+                  value={groupForm.year}
+                  label="Year *"
+                  onChange={(e) => setGroupForm({ ...groupForm, year: e.target.value as number })}
+                >
+                  {[1, 2, 3, 4, 5, 6].map(year => (
+                    <MenuItem key={year} value={year}>Year {year}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -955,7 +1007,7 @@ const Admin: React.FC = () => {
         <DialogActions>
           <Button onClick={handleCloseGroupDialog}>Cancel</Button>
           <Button onClick={handleSaveGroup} variant="contained">
-            {editingGroup ? 'Update' : 'Add'} Group
+            {editingGroup ? 'Update' : 'Create'} Group
           </Button>
         </DialogActions>
       </Dialog>

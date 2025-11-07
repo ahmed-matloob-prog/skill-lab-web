@@ -459,11 +459,12 @@ export const downloadStudentTemplate = (): void => {
   const instructionsData = [
     { 'Field': 'Student Name', 'Required': 'Yes', 'Description': 'Full name of the student' },
     { 'Field': 'Year', 'Required': 'Yes', 'Description': 'Academic year: 1, 2, 3, 4, 5, or 6' },
-    { 'Field': 'Group', 'Required': 'Yes', 'Description': 'Group name: Group1 to Group30' },
+    { 'Field': 'Group', 'Required': 'Yes', 'Description': 'Group name - must match existing group name for the selected year (created in Admin Panel → Group Management)' },
     { 'Field': 'Unit', 'Required': 'Only for Year 2/3', 'Description': 'MSK, HEM, CVS, Resp, GIT, GUT, Neuro, or END (leave empty for other years)' },
     { 'Field': '', 'Required': '', 'Description': '' },
     { 'Field': 'Note', 'Required': '', 'Description': 'Student ID will be auto-generated' },
     { 'Field': 'Note', 'Required': '', 'Description': 'Email and Phone fields removed - add manually if needed' },
+    { 'Field': 'Note', 'Required': '', 'Description': 'Make sure groups are created in Admin Panel before importing students' },
   ];
 
   const instructionsSheet = XLSX.utils.json_to_sheet(instructionsData);

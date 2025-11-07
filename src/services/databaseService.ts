@@ -491,26 +491,12 @@ class DatabaseService {
     localStorage.setItem(this.groupsKey, JSON.stringify(allGroups));
   }
 
-  // Update groups to include all Group1-Group30
+  // Legacy method - no longer auto-generates groups
+  // Groups are now created manually by admin through Group Management UI
   async updateGroupsToFullSet(): Promise<void> {
-    const demoGroups: Group[] = [];
-    
-    // Generate groups 1-30 - available for all years
-    for (let i = 1; i <= 30; i++) {
-      const year = 1; // Default year, but groups are available for all years
-      const description = `Group ${i} - Available for all years`;
-      
-      demoGroups.push({
-        id: `group-${i}`,
-        name: `Group${i}`,
-        year: year,
-        description: description,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    }
-    
-    localStorage.setItem(this.groupsKey, JSON.stringify(demoGroups));
+    // This method is kept for backward compatibility but does nothing
+    // Admin can create custom groups through the UI instead
+    logger.log('updateGroupsToFullSet called - groups are now managed manually');
   }
 }
 
