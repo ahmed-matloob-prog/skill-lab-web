@@ -49,6 +49,7 @@ import FirebaseUserService from '../services/firebaseUserService';
 import FirebasePasswordService from '../services/firebasePasswordService';
 import AdminReport from './AdminReport';
 import TrainerReports from './TrainerReports';
+import NewYearReset from './NewYearReset';
 import { sanitizeString, validateUsername, validateEmail, validatePassword } from '../utils/validator';
 
 interface TabPanelProps {
@@ -506,6 +507,7 @@ const Admin: React.FC = () => {
           <Tab label="System Statistics" />
           <Tab label="Grand Report" />
           <Tab label="Trainer Reports" />
+          <Tab label="New Year Setup" />
         </Tabs>
       </Box>
 
@@ -804,6 +806,10 @@ const Admin: React.FC = () => {
 
       <TabPanel value={tabValue} index={5}>
         <TrainerReports />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={6}>
+        <NewYearReset />
       </TabPanel>
 
       {/* User Dialog */}
