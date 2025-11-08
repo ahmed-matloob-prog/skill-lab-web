@@ -8,6 +8,8 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import Layout from './components/Layout';
 import LoginForm from './components/LoginForm';
 import LoadingSpinner from './components/LoadingSpinner';
+import UpdateBanner from './components/UpdateBanner';
+import { useVersionCheck } from './hooks/useVersionCheck';
 import { USER_ROLES } from './constants';
 
 // Lazy load pages for code splitting
@@ -102,42 +104,50 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 // Main App Component
 const AppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { updateAvailable, applyUpdate, dismissUpdate } = useVersionCheck(300000); // Check every 5 minutes
 
   return (
-    <Router>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginForm />} 
-        />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Suspense fallback={<LoadingSpinner />}>
-                  <Routes>
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/students" element={<Students />} />
-                    <Route path="/input" element={<CombinedInput />} />
-                    <Route path="/sync" element={<Sync />} />
-                    <Route
-                      path="/admin"
-                      element={
-                        <AdminRoute>
-                          <Admin />
-                        </AdminRoute>
-                      }
-                    />
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  </Routes>
-                </Suspense>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
+    <>
+      <UpdateBanner
+        open={updateAvailable}
+        onUpdate={applyUpdate}
+        onDismiss={dismissUpdate}
+      />
+      <Router>
+        <Routes>
+          <Route
+            path="/login"
+            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginForm />}
+          />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <Routes>
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/students" element={<Students />} />
+                      <Route path="/input" element={<CombinedInput />} />
+                      <Route path="/sync" element={<Sync />} />
+                      <Route
+                        path="/admin"
+                        element={
+                          <AdminRoute>
+                            <Admin />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    </Routes>
+                  </Suspense>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Router>
+    </>
   );
 };
 
