@@ -42,9 +42,22 @@ class DatabaseService {
 
   // Group operations
   async addGroup(group: Omit<Group, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const groups = await this.getGroups();
+
+    // Check for duplicate: same name and same year
+    const duplicate = groups.find(g =>
+      g.name.toLowerCase().trim() === group.name.toLowerCase().trim() &&
+      g.year === group.year
+    );
+
+    if (duplicate) {
+      logger.warn(`Group "${group.name}" for Year ${group.year} already exists - preventing duplicate`);
+      throw new Error(`Group "${group.name}" already exists for Year ${group.year}. Please use a different name or delete the existing group first.`);
+    }
+
     const id = `group-${Date.now()}`;
     const now = new Date().toISOString();
-    
+
     const newGroup: Group = {
       ...group,
       id,
@@ -52,9 +65,10 @@ class DatabaseService {
       updatedAt: now
     };
 
-    const groups = await this.getGroups();
     groups.push(newGroup);
     localStorage.setItem(this.groupsKey, JSON.stringify(groups));
+
+    logger.log(`Group created: "${group.name}" (Year ${group.year})`);
 
     return id;
   }
