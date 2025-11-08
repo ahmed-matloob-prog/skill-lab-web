@@ -16,16 +16,20 @@ class DatabaseService {
         // Start with empty students array for production
         localStorage.setItem(this.studentsKey, JSON.stringify([]));
       }
-      
-      // Always ensure we have all 30 groups available
-      await this.ensureAllGroupsExist();
-      
+
+      // Initialize groups with empty array if they don't exist
+      // Groups are now managed manually through Admin Panel (custom groups)
+      const groups = localStorage.getItem(this.groupsKey);
+      if (!groups) {
+        localStorage.setItem(this.groupsKey, JSON.stringify([]));
+      }
+
       const attendance = localStorage.getItem(this.attendanceKey);
       if (!attendance) {
         // Start with empty attendance array for production
         localStorage.setItem(this.attendanceKey, JSON.stringify([]));
       }
-      
+
       const assessments = localStorage.getItem(this.assessmentsKey);
       if (!assessments) {
         localStorage.setItem(this.assessmentsKey, JSON.stringify([]));
@@ -76,16 +80,15 @@ class DatabaseService {
   }
 
   async deleteGroup(id: string): Promise<void> {
-    // Don't actually delete the group - just clear its data
-    // Groups should be persistent and available for all years
-    
-    // Only delete related students, attendance and assessment records
+    // Delete the group and all related data
+    const groups = await this.getGroups();
+    const filteredGroups = groups.filter(g => g.id !== id);
+    localStorage.setItem(this.groupsKey, JSON.stringify(filteredGroups));
+
+    // Also delete related students, attendance and assessment records
     await this.deleteStudentsByGroup(id);
     await this.deleteAttendanceByGroup(id);
     await this.deleteAssessmentsByGroup(id);
-    
-    // Ensure the group still exists in the system
-    await this.ensureAllGroupsExist();
   }
 
   // Student operations
