@@ -51,6 +51,7 @@ import AdminReport from './AdminReport';
 import TrainerReports from './TrainerReports';
 import NewYearReset from './NewYearReset';
 import { sanitizeString, validateUsername, validateEmail, validatePassword } from '../utils/validator';
+import { hashPassword } from '../utils/passwordUtils';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -246,26 +247,25 @@ const Admin: React.FC = () => {
         // Update password if provided
         if (userForm.password.trim()) {
           logger.log('Admin: Updating password for user:', editingUser.username);
-          // Update password through AuthService to sync with Firebase
-          try {
-            await AuthService.changePassword(editingUser.id, userForm.password.trim(), userForm.password.trim());
-          } catch (error) {
-            // If old password doesn't match, directly save new password
-            // This allows admins to reset passwords
-            const passwords = JSON.parse(localStorage.getItem('userPasswords') || '{}');
-            const normalizedUsername = editingUser.username.toLowerCase().trim();
-            passwords[normalizedUsername] = userForm.password.trim();
-            if (normalizedUsername !== editingUser.username) {
-              passwords[editingUser.username] = userForm.password.trim();
-            }
-            localStorage.setItem('userPasswords', JSON.stringify(passwords));
+          // Hash the password before storing
+          const hashedPassword = await hashPassword(userForm.password.trim());
 
-            // Also save to Firebase if configured
-            if (FirebasePasswordService.isConfigured()) {
-              await FirebasePasswordService.savePassword(editingUser.username, userForm.password.trim());
-            }
+          // Save hashed password to localStorage
+          const passwords = JSON.parse(localStorage.getItem('userPasswords') || '{}');
+          const normalizedUsername = editingUser.username.toLowerCase().trim();
+          passwords[normalizedUsername] = hashedPassword;
+          // Also store with original username for backwards compatibility
+          if (normalizedUsername !== editingUser.username) {
+            passwords[editingUser.username] = hashedPassword;
           }
-          logger.log('Admin: Password updated successfully');
+          localStorage.setItem('userPasswords', JSON.stringify(passwords));
+
+          // Also save to Firebase if configured
+          if (FirebasePasswordService.isConfigured()) {
+            await FirebasePasswordService.savePassword(normalizedUsername, hashedPassword);
+          }
+
+          logger.log('Admin: Password hashed and saved successfully');
         }
       } else {
         logger.log('Admin: Creating user with password from form:', userForm.password);
