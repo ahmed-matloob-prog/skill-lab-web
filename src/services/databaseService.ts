@@ -277,11 +277,12 @@ class DatabaseService {
   async addAttendanceRecord(record: Omit<AttendanceRecord, 'id' | 'timestamp'>): Promise<string> {
     const id = `attendance-${Date.now()}`;
     const timestamp = new Date().toISOString();
-    
+
     const newRecord: AttendanceRecord = {
       ...record,
       id,
-      timestamp
+      timestamp,
+      synced: false // Mark as unsynced initially
     };
 
     const attendance = await this.getAttendanceRecords();
@@ -340,11 +341,12 @@ class DatabaseService {
   async addAssessmentRecord(record: Omit<AssessmentRecord, 'id' | 'timestamp'>): Promise<string> {
     const id = `assessment-${Date.now()}`;
     const timestamp = new Date().toISOString();
-    
+
     const newRecord: AssessmentRecord = {
       ...record,
       id,
-      timestamp
+      timestamp,
+      synced: false // Mark as unsynced initially
     };
 
     const assessments = await this.getAssessmentRecords();
