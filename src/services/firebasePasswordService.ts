@@ -2,7 +2,7 @@
 // This service handles password storage in Firebase Firestore
 // Note: In production, use Firebase Authentication instead of storing passwords
 
-import { collection, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, isConfigured } from '../config/firebase';
 import { logger } from '../utils/logger';
 
@@ -40,10 +40,17 @@ class FirebasePasswordService {
     }
 
     try {
-      // Note: Firestore doesn't have a direct "get all documents" that's efficient
-      // For now, we'll use localStorage as primary, Firebase as sync
-      // This is a POC limitation - full implementation would use Firebase Auth
+      logger.log('Firebase: Fetching all passwords from Firestore...');
+      const passwordsSnapshot = await getDocs(collection(db, this.passwordsCollection));
       const passwords: { [username: string]: string } = {};
+
+      passwordsSnapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data();
+        const username = data.username || docSnapshot.id;
+        passwords[username] = data.password;
+      });
+
+      logger.log('Firebase: Retrieved', Object.keys(passwords).length, 'passwords from Firestore');
       return passwords;
     } catch (error) {
       logger.error('Firebase: Error getting all passwords:', error);
