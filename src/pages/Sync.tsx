@@ -84,30 +84,67 @@ const SyncPage: React.FC = () => {
     setSyncStatus('syncing');
 
     try {
-      // Simulate API call to server
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       // Get unsynced records
       const unsynced = await getUnsyncedRecords();
-      
-      // Simulate successful sync
+
+      logger.log('Sync: Starting sync to Firebase...', {
+        groups: unsynced.groups.length,
+        students: unsynced.students.length,
+        attendance: unsynced.attendance.length,
+        assessments: unsynced.assessments.length
+      });
+
+      // Sync groups to Firebase
+      if (unsynced.groups.length > 0) {
+        logger.log(`Sync: Uploading ${unsynced.groups.length} groups to Firebase...`);
+        const FirebaseSyncService = (await import('../services/firebaseSyncService')).default;
+        for (const group of unsynced.groups) {
+          await FirebaseSyncService.syncGroup(group);
+        }
+        logger.log('Sync: Groups uploaded successfully');
+      }
+
+      // Sync students to Firebase
+      if (unsynced.students.length > 0) {
+        logger.log(`Sync: Uploading ${unsynced.students.length} students to Firebase...`);
+        const FirebaseSyncService = (await import('../services/firebaseSyncService')).default;
+        for (const student of unsynced.students) {
+          await FirebaseSyncService.syncStudent(student);
+        }
+        logger.log('Sync: Students uploaded successfully');
+      }
+
+      // Mark attendance as synced
       const attendanceIds = unsynced.attendance.map(r => r.id);
       const assessmentIds = unsynced.assessments.map(r => r.id);
-      
+
       if (attendanceIds.length > 0) {
+        logger.log(`Sync: Syncing ${attendanceIds.length} attendance records...`);
+        const FirebaseSyncService = (await import('../services/firebaseSyncService')).default;
+        for (const record of unsynced.attendance) {
+          await FirebaseSyncService.syncAttendance(record);
+        }
         await markAttendanceSynced(attendanceIds);
+        logger.log('Sync: Attendance synced successfully');
       }
-      
+
       if (assessmentIds.length > 0) {
+        logger.log(`Sync: Syncing ${assessmentIds.length} assessment records...`);
+        const FirebaseSyncService = (await import('../services/firebaseSyncService')).default;
+        for (const record of unsynced.assessments) {
+          await FirebaseSyncService.syncAssessment(record);
+        }
         await markAssessmentsSynced(assessmentIds);
+        logger.log('Sync: Assessments synced successfully');
       }
 
       // Update last sync time
       const now = new Date().toISOString();
       setLastSync(now);
       localStorage.setItem('lastSync', now);
-      
+
       setSyncStatus('success');
+      logger.log('Sync: All data synced successfully to Firebase!');
       await loadUnsyncedData();
     } catch (error) {
       logger.error('Sync error:', error);
