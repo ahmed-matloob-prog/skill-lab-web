@@ -115,11 +115,11 @@ const Dashboard: React.FC = () => {
         Dashboard
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Welcome back, {user?.username}! Here's an overview of your data.
+        Welcome back, {user?.username}! Here's an overview of your {user?.role === 'admin' ? 'system' : 'teaching activities'}.
       </Typography>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={user?.role === 'admin' ? 3 : 4}>
           <StatCard
             title="Total Students"
             value={stats.totalStudents}
@@ -127,15 +127,18 @@ const Dashboard: React.FC = () => {
             color="#2196F3"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Groups"
-            value={stats.totalGroups}
-            icon={<School sx={{ color: 'white' }} />}
-            color="#4CAF50"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        {/* Only show Groups stat for admins */}
+        {user?.role === 'admin' && (
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              title="Groups"
+              value={stats.totalGroups}
+              icon={<School sx={{ color: 'white' }} />}
+              color="#4CAF50"
+            />
+          </Grid>
+        )}
+        <Grid item xs={12} sm={6} md={user?.role === 'admin' ? 3 : 4}>
           <StatCard
             title="Attendance Records"
             value={stats.totalAttendance}
@@ -143,7 +146,7 @@ const Dashboard: React.FC = () => {
             color="#FF9800"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={user?.role === 'admin' ? 3 : 4}>
           <StatCard
             title="Assessments"
             value={stats.totalAssessments}

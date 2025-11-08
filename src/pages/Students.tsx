@@ -113,8 +113,13 @@ const Students: React.FC = () => {
     groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year }))
   });
 
-  // Filter groups by the selected year in the form
-  const filteredGroups = accessibleGroups.filter(group => group.year === formData.year);
+  // Filter groups by the selected year in the form (for add/edit dialog)
+  const filteredGroupsForForm = accessibleGroups.filter(group => group.year === formData.year);
+
+  // Filter groups for the filter dropdown - by selected year filter
+  const filteredGroupsForFilter = selectedYear === 'all'
+    ? accessibleGroups
+    : accessibleGroups.filter(group => group.year === selectedYear);
 
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
@@ -420,7 +425,7 @@ const Students: React.FC = () => {
                   onChange={(e) => setSelectedGroup(e.target.value)}
                 >
                   <MenuItem value="all">All Groups</MenuItem>
-                  {filteredGroups.map(group => (
+                  {filteredGroupsForFilter.map(group => (
                     <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
                   ))}
                 </Select>
@@ -570,13 +575,13 @@ const Students: React.FC = () => {
                     }
                   }}
                 >
-                  {accessibleGroups.map(group => (
+                  {filteredGroupsForForm.map(group => (
                     <MenuItem key={group.id} value={group.id}>
                       {group.name}
                     </MenuItem>
                   ))}
-                  {accessibleGroups.length === 0 && (
-                    <MenuItem disabled>No groups available</MenuItem>
+                  {filteredGroupsForForm.length === 0 && (
+                    <MenuItem disabled>No groups available for this year</MenuItem>
                   )}
                 </Select>
                 {validationErrors.groupId && (
