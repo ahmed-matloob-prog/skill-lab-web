@@ -34,6 +34,7 @@ import {
   CloudOff,
   CloudSync,
   Error as ErrorIcon,
+  BarChart,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -122,13 +123,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Students', icon: <People />, path: '/students' },
     { text: 'Input Data', icon: <Assessment />, path: '/input' },
     { text: 'Assessments', icon: <Quiz />, path: '/assessments' },
+    { text: 'Reports', icon: <BarChart />, path: '/reports' },
     { text: 'Sync', icon: <Sync />, path: '/sync' },
   ];
 
   // Add admin-only menu items
   if (user?.role === USER_ROLES.ADMIN) {
     menuItems.push(
-      { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' }
+      { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' },
+      { text: 'Admin Reports', icon: <BarChart />, path: '/admin-reports' }
     );
   }
 

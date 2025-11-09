@@ -17,6 +17,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Students = lazy(() => import('./pages/Students'));
 const CombinedInput = lazy(() => import('./pages/CombinedInput'));
 const Assessments = lazy(() => import('./pages/Assessments'));
+const TrainerReports = lazy(() => import('./pages/TrainerReports'));
+const AdminReport = lazy(() => import('./pages/AdminReport'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Sync = lazy(() => import('./pages/Sync'));
 
@@ -131,12 +133,21 @@ const AppContent: React.FC = () => {
                       <Route path="/students" element={<Students />} />
                       <Route path="/input" element={<CombinedInput />} />
                       <Route path="/assessments" element={<Assessments />} />
+                      <Route path="/reports" element={<TrainerReports />} />
                       <Route path="/sync" element={<Sync />} />
                       <Route
                         path="/admin"
                         element={
                           <AdminRoute>
                             <Admin />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route
+                        path="/admin-reports"
+                        element={
+                          <AdminRoute>
+                            <AdminReport />
                           </AdminRoute>
                         }
                       />
