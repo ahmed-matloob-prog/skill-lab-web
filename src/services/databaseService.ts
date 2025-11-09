@@ -363,7 +363,13 @@ class DatabaseService {
       ...record,
       id,
       timestamp,
-      synced: false // Mark as unsynced initially
+      synced: false, // Mark as unsynced initially
+
+      // Initialize export fields
+      exportedToAdmin: false,
+      editCount: 0,
+      lastEditedAt: timestamp,
+      lastEditedBy: record.trainerId
     };
 
     const assessments = await this.getAssessmentRecords();
@@ -413,6 +419,119 @@ class DatabaseService {
     const assessments = await this.getAssessmentRecords();
     const filteredAssessments = assessments.filter(r => r.groupId !== groupId);
     localStorage.setItem(this.assessmentsKey, JSON.stringify(filteredAssessments));
+  }
+
+  // Export to Admin operations
+  async exportAssessmentToAdmin(assessmentId: string, trainerId: string): Promise<void> {
+    const assessments = await this.getAssessmentRecords();
+    const index = assessments.findIndex(a => a.id === assessmentId);
+
+    if (index === -1) {
+      throw new Error('Assessment not found');
+    }
+
+    const assessment = assessments[index];
+
+    // Validate: Must be the creator
+    if (assessment.trainerId !== trainerId) {
+      throw new Error('Only the creator can export this assessment');
+    }
+
+    // Validate: Must not be already exported
+    if (assessment.exportedToAdmin === true) {
+      throw new Error('Assessment already exported');
+    }
+
+    // Mark as exported (LOCK IT)
+    assessments[index] = {
+      ...assessment,
+      exportedToAdmin: true,
+      exportedAt: new Date().toISOString(),
+      exportedBy: trainerId,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: trainerId
+    };
+
+    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    logger.log(`Assessment ${assessmentId} exported to admin (locked)`);
+  }
+
+  async exportMultipleAssessmentsToAdmin(
+    assessmentIds: string[],
+    trainerId: string
+  ): Promise<{ success: number; failed: number }> {
+    let success = 0;
+    let failed = 0;
+
+    for (const id of assessmentIds) {
+      try {
+        await this.exportAssessmentToAdmin(id, trainerId);
+        success++;
+      } catch (error) {
+        logger.error(`Failed to export ${id}:`, error);
+        failed++;
+      }
+    }
+
+    return { success, failed };
+  }
+
+  async unlockAssessment(assessmentId: string, adminId: string): Promise<void> {
+    const assessments = await this.getAssessmentRecords();
+    const index = assessments.findIndex(a => a.id === assessmentId);
+
+    if (index === -1) {
+      throw new Error('Assessment not found');
+    }
+
+    const assessment = assessments[index];
+
+    // Only unlock if currently exported
+    if (assessment.exportedToAdmin !== true) {
+      throw new Error('Assessment is not locked');
+    }
+
+    assessments[index] = {
+      ...assessment,
+      exportedToAdmin: false,
+      exportedAt: undefined,
+      exportedBy: undefined,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: adminId
+    };
+
+    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    logger.log(`Assessment ${assessmentId} unlocked by admin ${adminId}`);
+  }
+
+  async getExportedAssessments(): Promise<AssessmentRecord[]> {
+    const assessments = await this.getAssessmentRecords();
+    return assessments.filter(a => a.exportedToAdmin === true);
+  }
+
+  async getDraftAssessments(trainerId: string): Promise<AssessmentRecord[]> {
+    const assessments = await this.getAssessmentRecords();
+    return assessments.filter(a => a.trainerId === trainerId && a.exportedToAdmin !== true);
+  }
+
+  async markAssessmentReviewedByAdmin(
+    assessmentId: string,
+    adminId: string
+  ): Promise<void> {
+    const assessments = await this.getAssessmentRecords();
+    const index = assessments.findIndex(a => a.id === assessmentId);
+
+    if (index !== -1) {
+      assessments[index] = {
+        ...assessments[index],
+        reviewedByAdmin: true,
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: adminId
+      };
+
+      localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+      logger.log(`Assessment ${assessmentId} marked as reviewed by admin ${adminId}`);
+    }
   }
 
   // Sync operations

@@ -45,6 +45,14 @@ interface DatabaseContextType {
   getAssessmentsByStudent: (studentId: string) => Promise<AssessmentRecord[]>;
   getAssessmentsByGroup: (groupId: string) => Promise<AssessmentRecord[]>;
 
+  // Export to Admin operations
+  exportAssessmentToAdmin: (assessmentId: string, trainerId: string) => Promise<void>;
+  exportMultipleAssessmentsToAdmin: (assessmentIds: string[], trainerId: string) => Promise<{ success: number; failed: number }>;
+  unlockAssessment: (assessmentId: string, adminId: string) => Promise<void>;
+  getExportedAssessments: () => Promise<AssessmentRecord[]>;
+  getDraftAssessments: (trainerId: string) => Promise<AssessmentRecord[]>;
+  markAssessmentReviewedByAdmin: (assessmentId: string, adminId: string) => Promise<void>;
+
   // Refresh operations
   refreshStudents: () => Promise<void>;
   refreshGroups: () => Promise<void>;
@@ -443,6 +451,75 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return await DatabaseService.getAssessmentsByGroup(groupId);
   };
 
+  // Export to Admin operations
+  const exportAssessmentToAdmin = async (assessmentId: string, trainerId: string): Promise<void> => {
+    await DatabaseService.exportAssessmentToAdmin(assessmentId, trainerId);
+    await refreshAssessments();
+
+    // Sync to Firebase in background
+    const exportedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
+    if (exportedRecord) {
+      FirebaseSyncService.syncAssessment(exportedRecord).catch(error => {
+        logger.error('Error syncing exported assessment to Firebase:', error);
+      });
+    }
+  };
+
+  const exportMultipleAssessmentsToAdmin = async (
+    assessmentIds: string[],
+    trainerId: string
+  ): Promise<{ success: number; failed: number }> => {
+    const result = await DatabaseService.exportMultipleAssessmentsToAdmin(assessmentIds, trainerId);
+    await refreshAssessments();
+
+    // Sync all exported assessments to Firebase in background
+    const exportedRecords = await DatabaseService.getAssessmentRecords().then(assessments =>
+      assessments.filter(a => assessmentIds.includes(a.id))
+    );
+
+    exportedRecords.forEach(record => {
+      FirebaseSyncService.syncAssessment(record).catch(error => {
+        logger.error(`Error syncing exported assessment ${record.id} to Firebase:`, error);
+      });
+    });
+
+    return result;
+  };
+
+  const unlockAssessment = async (assessmentId: string, adminId: string): Promise<void> => {
+    await DatabaseService.unlockAssessment(assessmentId, adminId);
+    await refreshAssessments();
+
+    // Sync to Firebase in background
+    const unlockedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
+    if (unlockedRecord) {
+      FirebaseSyncService.syncAssessment(unlockedRecord).catch(error => {
+        logger.error('Error syncing unlocked assessment to Firebase:', error);
+      });
+    }
+  };
+
+  const getExportedAssessments = async (): Promise<AssessmentRecord[]> => {
+    return await DatabaseService.getExportedAssessments();
+  };
+
+  const getDraftAssessments = async (trainerId: string): Promise<AssessmentRecord[]> => {
+    return await DatabaseService.getDraftAssessments(trainerId);
+  };
+
+  const markAssessmentReviewedByAdmin = async (assessmentId: string, adminId: string): Promise<void> => {
+    await DatabaseService.markAssessmentReviewedByAdmin(assessmentId, adminId);
+    await refreshAssessments();
+
+    // Sync to Firebase in background
+    const reviewedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
+    if (reviewedRecord) {
+      FirebaseSyncService.syncAssessment(reviewedRecord).catch(error => {
+        logger.error('Error syncing reviewed assessment to Firebase:', error);
+      });
+    }
+  };
+
   // Refresh operations
   const refreshStudents = async (): Promise<void> => {
     try {
@@ -561,6 +638,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     deleteAssessmentRecord,
     getAssessmentsByStudent,
     getAssessmentsByGroup,
+
+    // Export to Admin operations
+    exportAssessmentToAdmin,
+    exportMultipleAssessmentsToAdmin,
+    unlockAssessment,
+    getExportedAssessments,
+    getDraftAssessments,
+    markAssessmentReviewedByAdmin,
 
     // Refresh operations
     refreshStudents,

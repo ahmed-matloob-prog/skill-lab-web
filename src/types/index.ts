@@ -49,6 +49,21 @@ export interface AssessmentRecord {
   timestamp: string;
   synced: boolean;
   trainerId: string;
+
+  // Export to Admin workflow
+  exportedToAdmin?: boolean;           // Has trainer exported this to admin?
+  exportedAt?: string;                 // When was it exported?
+  exportedBy?: string;                 // Trainer ID who exported it
+
+  // Admin review tracking
+  reviewedByAdmin?: boolean;           // Has admin reviewed this?
+  reviewedAt?: string;                 // When admin reviewed
+  reviewedBy?: string;                 // Admin user ID who reviewed
+
+  // Edit tracking
+  lastEditedAt?: string;               // Last modification timestamp
+  lastEditedBy?: string;               // User ID who made last edit
+  editCount?: number;                  // Number of times edited
 }
 
 export interface SyncData {
