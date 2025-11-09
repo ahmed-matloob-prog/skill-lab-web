@@ -120,11 +120,18 @@ const Assessments: React.FC = () => {
   });
 
   // Filter groups based on user permissions
-  const accessibleGroups = user?.role === 'admin' ? groups : 
+  const accessibleGroups = user?.role === 'admin' ? groups :
     groups.filter(group => user?.assignedGroups?.includes(group.id));
 
-  // Groups are available for all years, so no need to filter by year
-  const filteredGroups = accessibleGroups;
+  // Filter groups by year - only show groups that have students from the selected year
+  const filteredGroups = selectedYear === 'all'
+    ? accessibleGroups
+    : accessibleGroups.filter(group => {
+        // Check if this group has any students from the selected year
+        return students.some(student =>
+          student.groupId === group.id && student.year === selectedYear
+        );
+      });
 
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
