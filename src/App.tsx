@@ -16,6 +16,7 @@ import { USER_ROLES } from './constants';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Students = lazy(() => import('./pages/Students'));
 const CombinedInput = lazy(() => import('./pages/CombinedInput'));
+const Assessments = lazy(() => import('./pages/Assessments'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Sync = lazy(() => import('./pages/Sync'));
 
@@ -129,6 +130,7 @@ const AppContent: React.FC = () => {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/students" element={<Students />} />
                       <Route path="/input" element={<CombinedInput />} />
+                      <Route path="/assessments" element={<Assessments />} />
                       <Route path="/sync" element={<Sync />} />
                       <Route
                         path="/admin"
