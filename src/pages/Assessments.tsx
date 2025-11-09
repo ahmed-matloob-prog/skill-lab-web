@@ -33,6 +33,12 @@ import {
   Save,
   Visibility,
   VisibilityOff,
+  Send,
+  Lock,
+  Edit,
+  Delete,
+  Warning,
+  LockOpen,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -42,9 +48,19 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
 import { Student, AssessmentRecord } from '../types';
+import { assessmentPermissions } from '../utils/assessmentPermissions';
 
 const Assessments: React.FC = () => {
-  const { students, groups, addAssessmentRecord, getAssessmentsByGroup, loading } = useDatabase();
+  const {
+    students,
+    groups,
+    addAssessmentRecord,
+    getAssessmentsByGroup,
+    exportMultipleAssessmentsToAdmin,
+    updateAssessmentRecord,
+    deleteAssessmentRecord,
+    loading
+  } = useDatabase();
   const { user } = useAuth();
   
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
@@ -64,6 +80,20 @@ const Assessments: React.FC = () => {
   const [scores, setScores] = useState<{[studentId: string]: string}>({});
   const [error, setError] = useState<string | null>(null);
   const [loadingSave, setLoadingSave] = useState(false);
+
+  // Export dialog state
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [selectedForExport, setSelectedForExport] = useState<string[]>([]);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingAssessment, setEditingAssessment] = useState<AssessmentRecord | null>(null);
+  const [editScore, setEditScore] = useState<string>('');
+
+  // Delete confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingAssessment, setDeletingAssessment] = useState<AssessmentRecord | null>(null);
 
   const assessmentTypes = [
     { value: 'exam', label: 'Exam' },
@@ -201,6 +231,95 @@ const Assessments: React.FC = () => {
       setError('Failed to save assessment scores');
     } finally {
       setLoadingSave(false);
+    }
+  };
+
+  // Export to Admin handlers
+  const handleExportClick = (assessments: AssessmentRecord[]) => {
+    const unexported = assessments.filter(a => !a.exportedToAdmin);
+    setSelectedForExport(unexported.map(a => a.id));
+    setExportDialogOpen(true);
+  };
+
+  const handleExportConfirm = async () => {
+    if (selectedForExport.length === 0) return;
+
+    setExportLoading(true);
+    try {
+      const result = await exportMultipleAssessmentsToAdmin(selectedForExport, user!.id);
+
+      setExportDialogOpen(false);
+      setSelectedForExport([]);
+      await loadSavedAssessments();
+
+      alert(
+        `Export complete!\n✅ Success: ${result.success}\n` +
+          (result.failed > 0 ? `❌ Failed: ${result.failed}` : '')
+      );
+    } catch (error) {
+      logger.error('Export failed:', error);
+      alert('Failed to export assessments. Please try again.');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // Edit handler
+  const handleEditClick = (assessment: AssessmentRecord) => {
+    setEditingAssessment(assessment);
+    setEditScore(assessment.score.toString());
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editingAssessment) return;
+
+    const newScore = parseInt(editScore);
+    if (isNaN(newScore) || newScore < 0 || newScore > editingAssessment.maxScore) {
+      alert(`Score must be between 0 and ${editingAssessment.maxScore}`);
+      return;
+    }
+
+    try {
+      await updateAssessmentRecord(editingAssessment.id, {
+        score: newScore,
+        editCount: (editingAssessment.editCount || 0) + 1,
+        lastEditedAt: new Date().toISOString(),
+        lastEditedBy: user!.id,
+      });
+
+      setEditDialogOpen(false);
+      setEditingAssessment(null);
+      setEditScore('');
+      await loadSavedAssessments();
+
+      alert('Assessment updated successfully!');
+    } catch (error) {
+      logger.error('Update failed:', error);
+      alert('Failed to update assessment. Please try again.');
+    }
+  };
+
+  // Delete handler
+  const handleDeleteClick = (assessment: AssessmentRecord) => {
+    setDeletingAssessment(assessment);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingAssessment) return;
+
+    try {
+      await deleteAssessmentRecord(deletingAssessment.id);
+
+      setDeleteDialogOpen(false);
+      setDeletingAssessment(null);
+      await loadSavedAssessments();
+
+      alert('Assessment deleted successfully!');
+    } catch (error) {
+      logger.error('Delete failed:', error);
+      alert('Failed to delete assessment. Please try again.');
     }
   };
 
@@ -381,52 +500,196 @@ const Assessments: React.FC = () => {
         {showSavedScores && selectedGroup !== 'all' && (
           <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Saved Assessment Scores
-              </Typography>
               {savedAssessments.length === 0 ? (
                 <Alert severity="info">
                   No saved assessment scores found for this group.
                 </Alert>
               ) : (
-                <TableContainer component={Paper}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Student</TableCell>
-                        <TableCell>Assessment</TableCell>
-                        <TableCell>Type</TableCell>
-                        <TableCell align="center">Score</TableCell>
-                        <TableCell>Date</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {savedAssessments.map((assessment) => (
-                        <TableRow key={assessment.id}>
-                          <TableCell>{getStudentName(assessment.studentId)}</TableCell>
-                          <TableCell>{assessment.assessmentName}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={assessment.assessmentType}
-                              size="small"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell align="center">
-                            <Typography variant="body2">
-                              {assessment.score}/{assessment.maxScore}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              ({Math.round((assessment.score / assessment.maxScore) * 100)}%)
-                            </Typography>
-                          </TableCell>
-                          <TableCell>{assessment.date}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                <>
+                  {/* Group assessments by name+date */}
+                  {(() => {
+                    // Group logic
+                    const assessmentGroups = savedAssessments.reduce((acc, assessment) => {
+                      const key = `${assessment.assessmentName}-${assessment.date}-${assessment.groupId}`;
+                      if (!acc[key]) {
+                        acc[key] = {
+                          name: assessment.assessmentName,
+                          type: assessment.assessmentType,
+                          date: assessment.date,
+                          maxScore: assessment.maxScore,
+                          assessments: [],
+                          allExported: true
+                        };
+                      }
+                      acc[key].assessments.push(assessment);
+                      if (assessment.exportedToAdmin !== true) {
+                        acc[key].allExported = false;
+                      }
+                      return acc;
+                    }, {} as Record<string, any>);
+
+                    return Object.entries(assessmentGroups).map(([key, group]) => {
+                      const draftCount = group.assessments.filter((a: AssessmentRecord) => a.exportedToAdmin !== true).length;
+                      const exportedCount = group.assessments.filter((a: AssessmentRecord) => a.exportedToAdmin === true).length;
+
+                      return (
+                        <Card key={key} sx={{ mb: 2, border: '1px solid #e0e0e0' }}>
+                          <CardContent>
+                            {/* Header */}
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                              <Box>
+                                <Typography variant="h6">
+                                  {group.name}
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                  <Chip
+                                    label={group.type}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                  />
+                                  <Chip
+                                    label={`${group.date}`}
+                                    size="small"
+                                    variant="outlined"
+                                  />
+                                  <Chip
+                                    label={`Max: ${group.maxScore}`}
+                                    size="small"
+                                    variant="outlined"
+                                  />
+                                  <Chip
+                                    label={`${group.assessments.length} students`}
+                                    size="small"
+                                    variant="outlined"
+                                  />
+                                </Box>
+                              </Box>
+
+                              {/* Status & Actions */}
+                              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                {group.allExported ? (
+                                  <Chip
+                                    icon={<Lock />}
+                                    label="Exported to Admin"
+                                    color="primary"
+                                    variant="filled"
+                                  />
+                                ) : (
+                                  <>
+                                    {draftCount > 0 && (
+                                      <Chip
+                                        icon={<Edit />}
+                                        label={`${draftCount} Draft`}
+                                        color="warning"
+                                        variant="outlined"
+                                      />
+                                    )}
+                                    {exportedCount > 0 && (
+                                      <Chip
+                                        icon={<Lock />}
+                                        label={`${exportedCount} Locked`}
+                                        color="default"
+                                        size="small"
+                                      />
+                                    )}
+                                    {user?.role === 'trainer' && draftCount > 0 && (
+                                      <Button
+                                        variant="contained"
+                                        color="primary"
+                                        size="small"
+                                        startIcon={<Send />}
+                                        onClick={() => handleExportClick(group.assessments)}
+                                      >
+                                        Export to Admin
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </Box>
+                            </Box>
+
+                            {/* Student Scores Table */}
+                            <TableContainer>
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Student</TableCell>
+                                    <TableCell align="center">Score</TableCell>
+                                    <TableCell>Status</TableCell>
+                                    <TableCell align="right">Actions</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {group.assessments.map((assessment: AssessmentRecord) => {
+                                    const canEdit = user && assessmentPermissions.canEdit(assessment, user);
+                                    const canDelete = user && assessmentPermissions.canDelete(assessment, user);
+                                    const statusIcon = assessmentPermissions.getStatusIcon(assessment);
+                                    const statusMessage = assessmentPermissions.getStatusMessage(assessment);
+
+                                    return (
+                                      <TableRow key={assessment.id}>
+                                        <TableCell>{getStudentName(assessment.studentId)}</TableCell>
+                                        <TableCell align="center">
+                                          <Typography variant="body2">
+                                            {assessment.score}/{assessment.maxScore}
+                                          </Typography>
+                                          <Typography variant="caption" color="text.secondary">
+                                            ({Math.round((assessment.score / assessment.maxScore) * 100)}%)
+                                          </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Chip
+                                            icon={<span>{statusIcon}</span>}
+                                            label={statusMessage}
+                                            size="small"
+                                            color={assessmentPermissions.getStatusColor(assessment)}
+                                          />
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                                            {canEdit ? (
+                                              <>
+                                                <Button
+                                                  size="small"
+                                                  startIcon={<Edit />}
+                                                  onClick={() => handleEditClick(assessment)}
+                                                >
+                                                  Edit
+                                                </Button>
+                                                {canDelete && (
+                                                  <Button
+                                                    size="small"
+                                                    color="error"
+                                                    startIcon={<Delete />}
+                                                    onClick={() => handleDeleteClick(assessment)}
+                                                  >
+                                                    Delete
+                                                  </Button>
+                                                )}
+                                              </>
+                                            ) : (
+                                              <Chip
+                                                icon={<Lock />}
+                                                label="Locked"
+                                                size="small"
+                                                disabled
+                                              />
+                                            )}
+                                          </Box>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </CardContent>
+                        </Card>
+                      );
+                    });
+                  })()}
+                </>
               )}
             </CardContent>
           </Card>
@@ -447,6 +710,106 @@ const Assessments: React.FC = () => {
           </Box>
         )}
       </Box>
+
+      {/* Export Confirmation Dialog */}
+      <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Warning color="warning" />
+            Export to Admin
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <strong>Important:</strong> Once exported, you will NOT be able to edit or delete these assessments.
+          </Alert>
+
+          <Typography variant="body1" gutterBottom>
+            You are about to export <strong>{selectedForExport.length} assessment(s)</strong> to admin.
+          </Typography>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            After export, assessments will be locked. Contact your administrator if you need to make changes.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExportDialogOpen(false)} disabled={exportLoading}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<Send />}
+            onClick={handleExportConfirm}
+            disabled={exportLoading}
+          >
+            {exportLoading ? <CircularProgress size={24} /> : 'Confirm Export'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Assessment Score</DialogTitle>
+        <DialogContent>
+          {editingAssessment && (
+            <>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Student: {getStudentName(editingAssessment.studentId)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Assessment: {editingAssessment.assessmentName}
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Score"
+                type="number"
+                value={editScore}
+                onChange={(e) => setEditScore(e.target.value)}
+                inputProps={{ min: 0, max: editingAssessment.maxScore }}
+                helperText={`Max score: ${editingAssessment.maxScore}`}
+                sx={{ mt: 2 }}
+                autoFocus
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleEditSave}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Delete Assessment</DialogTitle>
+        <DialogContent>
+          {deletingAssessment && (
+            <>
+              <Alert severity="error" sx={{ mb: 2 }}>
+                This action cannot be undone.
+              </Alert>
+              <Typography variant="body1">
+                Are you sure you want to delete this assessment?
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Student: {getStudentName(deletingAssessment.studentId)}<br />
+                Assessment: {deletingAssessment.assessmentName}<br />
+                Score: {deletingAssessment.score}/{deletingAssessment.maxScore}
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteConfirm}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </LocalizationProvider>
   );
 };
