@@ -341,57 +341,64 @@ const AdminReport: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Unit Weekly Performance Export */}
-      {(selectedYear === 2 || selectedYear === 3) && (
-        <Card sx={{ mb: 3, bgcolor: '#f0f7ff' }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-              <TrendingUp sx={{ mr: 1 }} />
-              Unit Weekly Performance Report
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Export detailed weekly performance with trends, statistics, and visual dashboard for specific units
-            </Typography>
-            <Divider sx={{ my: 2 }} />
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Select Unit</InputLabel>
-                  <Select
-                    value={selectedUnit}
-                    label="Select Unit"
-                    onChange={(e) => setSelectedUnit(e.target.value)}
+      {/* Unit Weekly Performance Export - Always visible with instruction */}
+      <Card sx={{ mb: 3, bgcolor: selectedYear === 2 || selectedYear === 3 ? '#f0f7ff' : '#f5f5f5' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+            <TrendingUp sx={{ mr: 1 }} />
+            Unit Weekly Performance Report (With Trends & Charts)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Export detailed weekly performance with trends, statistics, and visual dashboard for specific units (Week 1-10)
+          </Typography>
+          {(selectedYear !== 2 && selectedYear !== 3) && (
+            <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
+              <strong>Please select Year 2 or Year 3</strong> to access Unit Weekly Performance reports. Units are only available for these years.
+            </Alert>
+          )}
+          {(selectedYear === 2 || selectedYear === 3) && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={6} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Select Unit</InputLabel>
+                    <Select
+                      value={selectedUnit}
+                      label="Select Unit"
+                      onChange={(e) => setSelectedUnit(e.target.value)}
+                    >
+                      <MenuItem value="">
+                        <em>Select a unit</em>
+                      </MenuItem>
+                      {units.map(unit => (
+                        <MenuItem key={unit} value={unit}>{unit}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<BarChart />}
+                    onClick={handleExportUnitWeeklyPerformance}
+                    disabled={!selectedUnit || loadingReport}
+                    fullWidth
                   >
-                    <MenuItem value="">
-                      <em>Select a unit</em>
-                    </MenuItem>
-                    {units.map(unit => (
-                      <MenuItem key={unit} value={unit}>{unit}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    Export Unit Report
+                  </Button>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Alert severity="info" sx={{ py: 0.5 }}>
+                    Includes: 4 sheets (Details, Weekly Summary, Statistics, Charts)
+                  </Alert>
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  startIcon={<BarChart />}
-                  onClick={handleExportUnitWeeklyPerformance}
-                  disabled={!selectedUnit || loadingReport}
-                  fullWidth
-                >
-                  Export Unit Report
-                </Button>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Alert severity="info" sx={{ py: 0.5 }}>
-                  Includes: 4 sheets (Details, Weekly Summary, Statistics, Charts)
-                </Alert>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-      )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {selectedYear === 'all' && selectedGroup === 'all' ? (
         <Alert severity="info">

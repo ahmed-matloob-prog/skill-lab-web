@@ -408,7 +408,18 @@ const CombinedInput: React.FC = () => {
                   <Select
                     value={selectedGroup}
                     label="Filter by Group"
-                    onChange={(e) => setSelectedGroup(e.target.value)}
+                    onChange={(e) => {
+                      const groupId = e.target.value;
+                      setSelectedGroup(groupId);
+
+                      // Auto-populate unit based on group's current unit
+                      if (groupId !== 'all') {
+                        const selectedGroupData = groups.find(g => g.id === groupId);
+                        if (selectedGroupData?.currentUnit) {
+                          setSelectedUnit(selectedGroupData.currentUnit);
+                        }
+                      }
+                    }}
                   >
                     <MenuItem value="all">All Groups</MenuItem>
                     {filteredGroups.map(group => (

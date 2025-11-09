@@ -153,55 +153,82 @@ class DatabaseService {
     const existingStudents = await this.getStudents();
     const groups = await this.getGroups();
     const groupMap = new Map(groups.map(g => [g.id, g.name]));
+    // Create reverse map: groupName (lowercase) -> groupId for flexible matching
+    const groupNameToIdMap = new Map(groups.map(g => [g.name.toLowerCase().trim(), g.id]));
     const addedStudents: Student[] = [];
     const errors: string[] = [];
     let skipped = 0;
-    
+
     for (const student of students) {
       try {
+        // Try to resolve group ID if user provided a group name instead
+        let resolvedGroupId = student.groupId;
+
+        // Check if the provided value is a group ID (exists in groupMap)
+        if (!groupMap.has(student.groupId)) {
+          // Not a valid ID, try to match by name
+          const normalizedInput = student.groupId.toLowerCase().trim();
+          const matchedGroupId = groupNameToIdMap.get(normalizedInput);
+
+          if (matchedGroupId) {
+            // Found a match by name, use the actual group ID
+            resolvedGroupId = matchedGroupId;
+          }
+        }
+
+        // Update student with resolved group ID
+        const studentWithResolvedGroup = { ...student, groupId: resolvedGroupId };
+
         // Check for duplicates by name (case-insensitive)
-        const normalizedName = student.name.toLowerCase().trim();
-        const existingStudent = existingStudents.find(s => 
+        const normalizedName = studentWithResolvedGroup.name.toLowerCase().trim();
+        const existingStudent = existingStudents.find(s =>
           s.name.toLowerCase().trim() === normalizedName &&
-          s.year === student.year &&
-          s.groupId === student.groupId
+          s.year === studentWithResolvedGroup.year &&
+          s.groupId === studentWithResolvedGroup.groupId
         );
-        
+
         if (existingStudent) {
           skipped++;
-          const groupName = groupMap.get(student.groupId) || student.groupId;
-          errors.push(`Skipped "${student.name}" - already exists in Year ${student.year}, ${groupName}`);
+          const groupName = groupMap.get(studentWithResolvedGroup.groupId) || studentWithResolvedGroup.groupId;
+          errors.push(`Skipped "${studentWithResolvedGroup.name}" - already exists in Year ${studentWithResolvedGroup.year}, ${groupName}`);
           continue;
         }
-        
+
         // Check for duplicate student ID if provided
-        if (student.studentId) {
-          const existingById = existingStudents.find(s => s.studentId === student.studentId);
+        if (studentWithResolvedGroup.studentId) {
+          const existingById = existingStudents.find(s => s.studentId === studentWithResolvedGroup.studentId);
           if (existingById) {
             skipped++;
-            errors.push(`Skipped "${student.name}" - Student ID "${student.studentId}" already exists`);
+            errors.push(`Skipped "${studentWithResolvedGroup.name}" - Student ID "${studentWithResolvedGroup.studentId}" already exists`);
             continue;
           }
         }
-        
+
         // Check against students we're about to add
-        const duplicateInBatch = addedStudents.find(s => 
+        const duplicateInBatch = addedStudents.find(s =>
           s.name.toLowerCase().trim() === normalizedName &&
-          s.year === student.year &&
-          s.groupId === student.groupId
+          s.year === studentWithResolvedGroup.year &&
+          s.groupId === studentWithResolvedGroup.groupId
         );
-        
+
         if (duplicateInBatch) {
           skipped++;
-          errors.push(`Skipped "${student.name}" - duplicate in import file`);
+          errors.push(`Skipped "${studentWithResolvedGroup.name}" - duplicate in import file`);
           continue;
         }
-        
+
+        // Validate that the group exists in Firebase (after resolution)
+        if (!groupMap.has(studentWithResolvedGroup.groupId)) {
+          skipped++;
+          errors.push(`Skipped "${studentWithResolvedGroup.name}" - Group "${student.groupId}" does not exist. Please create the group in Admin Panel → Group Management first.`);
+          continue;
+        }
+
         const id = `student-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const now = new Date().toISOString();
-        
+
         const newStudent: Student = {
-          ...student,
+          ...studentWithResolvedGroup,
           id,
           createdAt: now,
           updatedAt: now

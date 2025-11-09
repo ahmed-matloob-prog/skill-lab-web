@@ -42,7 +42,7 @@ import DatabaseService from '../services/databaseService';
 import { sanitizeString, validateName } from '../utils/validator';
 
 const Students: React.FC = () => {
-  const { students, groups, addStudent, updateStudent, deleteStudent, refreshStudents, forceRefresh, loading } = useDatabase();
+  const { students, groups, addStudent, addStudents, updateStudent, deleteStudent, refreshStudents, forceRefresh, loading } = useDatabase();
   const { user } = useAuth();
   
   const [openDialog, setOpenDialog] = useState(false);
@@ -235,9 +235,9 @@ const Students: React.FC = () => {
 
     try {
       const { students: importedStudents, errors } = await importStudentsFromExcel(file);
-      
-      // Use the new addStudents method with built-in duplicate checking
-      const result = await DatabaseService.addStudents(importedStudents);
+
+      // Use the DatabaseContext addStudents method with Firebase sync
+      const result = await addStudents(importedStudents);
       
       // Combine Excel parsing errors with duplicate detection errors
       const allErrors = [...errors, ...result.errors];
@@ -665,9 +665,9 @@ const Students: React.FC = () => {
                   <strong>Column name variations supported:</strong><br/>
                   • Name: "name", "Student Name", "Name"<br/>
                   • Year: "year", "Year", "Academic Year"<br/>
-                  • Group: "group", "Group", "Group ID"<br/>
+                  • Group: "group", "Group", "Group ID", "Group Name"<br/>
                   <strong>Year:</strong> Must be a number between 1 and 6<br/>
-                  <strong>Group:</strong> Must be Group1-Group30 or group-1-group-30 (available for all years)<br/>
+                  <strong>Group:</strong> Can be group ID (e.g., group-31) or group name (e.g., "Morning Class"). Automatically matched from Firebase groups.<br/>
                   <strong>Student ID:</strong> Auto-generated if not provided
                 </Typography>
               </Alert>

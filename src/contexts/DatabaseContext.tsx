@@ -20,6 +20,7 @@ interface DatabaseContextType {
 
   // Student operations
   addStudent: (student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  addStudents: (students: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>[]) => Promise<{ added: number; skipped: number; errors: string[] }>;
   updateStudent: (id: string, updates: Partial<Student>) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   getStudentsByGroup: (groupId: string) => Promise<Student[]>;
@@ -279,6 +280,30 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     return id;
+  };
+
+  const addStudents = async (students: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<{ added: number; skipped: number; errors: string[] }> => {
+    // Add to localStorage first (instant UI update)
+    const result = await DatabaseService.addStudents(students);
+    await refreshStudents();
+
+    // Sync all added students to Firebase in background
+    if (result.added > 0) {
+      const allStudents = await DatabaseService.getStudents();
+      // Get the newly added students (they'll be the most recent ones)
+      const addedStudents = allStudents.slice(-result.added);
+
+      // Sync each student to Firebase
+      addedStudents.forEach(student => {
+        FirebaseSyncService.syncStudent(student).catch(error => {
+          logger.error(`Error syncing student ${student.name} to Firebase:`, error);
+        });
+      });
+
+      logger.log(`DatabaseContext: Syncing ${result.added} students to Firebase`);
+    }
+
+    return result;
   };
 
   const updateStudent = async (id: string, updates: Partial<Student>): Promise<void> => {
@@ -614,6 +639,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // Student operations
     addStudent,
+    addStudents,
     updateStudent,
     deleteStudent,
     getStudentsByGroup,

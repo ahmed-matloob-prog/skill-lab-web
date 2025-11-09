@@ -47,41 +47,15 @@ export const importStudentsFromExcel = (file: File): Promise<{
 
             // Get group from various possible column names
             const groupValue = row.group || row['Group'] || row['GROUP'] || row['Group ID'] || row['GroupID'] || row.groupId || row['Group Name'] || row['GROUP NAME'];
-            let groupId = '';
-            
-            if (groupValue) {
-              const groupStr = groupValue.toString().trim();
-              
-              // Handle Group1, Group2, etc. format
-              const groupMatch = groupStr.match(/^Group(\d+)$/i);
-              if (groupMatch) {
-                const groupNum = parseInt(groupMatch[1]);
-                if (groupNum >= 1 && groupNum <= 30) {
-                  groupId = `group-${groupNum}`;
-                } else {
-                  errors.push(`Row ${rowNumber}: Group must be Group1-Group30`);
-                  return;
-                }
-              } else {
-                // Handle group-1, group-2, etc. format
-                const groupIdMatch = groupStr.match(/^group-(\d+)$/i);
-                if (groupIdMatch) {
-                  const groupNum = parseInt(groupIdMatch[1]);
-                  if (groupNum >= 1 && groupNum <= 30) {
-                    groupId = groupStr;
-                  } else {
-                    errors.push(`Row ${rowNumber}: Group ID must be group-1 to group-30`);
-                    return;
-                  }
-                } else {
-                  errors.push(`Row ${rowNumber}: Group must be in format Group1-Group30 or group-1-group-30`);
-                  return;
-                }
-              }
-            } else {
-              errors.push(`Row ${rowNumber}: Group is required (look for columns: group, Group, Group ID)`);
+
+            if (!groupValue) {
+              errors.push(`Row ${rowNumber}: Group is required (look for columns: group, Group, Group ID, Group Name)`);
               return;
             }
+
+            // Accept the group name/ID as-is - will be validated/matched when adding to database
+            // This allows matching by either group ID or group name from Firebase
+            const groupId = groupValue.toString().trim();
 
             // Validate email format if provided
             if (row.email && !isValidEmail(row.email)) {

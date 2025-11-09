@@ -106,6 +106,7 @@ const Admin: React.FC = () => {
     name: '',
     year: 1,
     description: '',
+    currentUnit: '',
   });
   
   const [error, setError] = useState<string | null>(null);
@@ -415,6 +416,7 @@ const Admin: React.FC = () => {
         name: group.name,
         year: group.year,
         description: group.description || '',
+        currentUnit: group.currentUnit || '',
       });
     } else {
       setEditingGroup(null);
@@ -422,6 +424,7 @@ const Admin: React.FC = () => {
         name: '',
         year: 1,
         description: '',
+        currentUnit: '',
       });
     }
     setError(null);
@@ -464,6 +467,7 @@ const Admin: React.FC = () => {
         name: sanitizeString(groupForm.name.trim()),
         year: groupForm.year,
         description: groupForm.description.trim() ? sanitizeString(groupForm.description.trim()) : undefined,
+        currentUnit: groupForm.currentUnit.trim() ? sanitizeString(groupForm.currentUnit.trim()) : undefined,
       };
 
       if (editingGroup) {
@@ -744,6 +748,7 @@ const Admin: React.FC = () => {
               <TableRow>
                 <TableCell>Group Name</TableCell>
                 <TableCell>Year</TableCell>
+                <TableCell>Current Unit</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Students</TableCell>
                 <TableCell align="center">Actions</TableCell>
@@ -755,6 +760,13 @@ const Admin: React.FC = () => {
                   <TableCell>{group.name}</TableCell>
                   <TableCell>
                     <Chip label={`Year ${group.year}`} size="small" />
+                  </TableCell>
+                  <TableCell>
+                    {group.currentUnit ? (
+                      <Chip label={group.currentUnit} size="small" color="primary" variant="outlined" />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">-</Typography>
+                    )}
                   </TableCell>
                   <TableCell>{group.description}</TableCell>
                   <TableCell>
@@ -1002,6 +1014,38 @@ const Admin: React.FC = () => {
                 placeholder="Optional description for this group"
               />
             </Grid>
+            {(groupForm.year === 2 || groupForm.year === 3) && (
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Current Unit (Optional)</InputLabel>
+                  <Select
+                    value={groupForm.currentUnit}
+                    label="Current Unit (Optional)"
+                    onChange={(e) => setGroupForm({ ...groupForm, currentUnit: e.target.value })}
+                  >
+                    <MenuItem value="">
+                      <em>No unit selected</em>
+                    </MenuItem>
+                    {groupForm.year === 2 && (
+                      <>
+                        <MenuItem value="MSK">MSK</MenuItem>
+                        <MenuItem value="HEM">HEM</MenuItem>
+                        <MenuItem value="CVS">CVS</MenuItem>
+                        <MenuItem value="Resp">Resp</MenuItem>
+                      </>
+                    )}
+                    {groupForm.year === 3 && (
+                      <>
+                        <MenuItem value="GIT">GIT</MenuItem>
+                        <MenuItem value="GUT">GUT</MenuItem>
+                        <MenuItem value="Neuro">Neuro</MenuItem>
+                        <MenuItem value="END">END</MenuItem>
+                      </>
+                    )}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>

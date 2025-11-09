@@ -16,6 +16,7 @@ export interface Group {
   name: string;
   year: number; // 1-6
   description?: string;
+  currentUnit?: string; // Current unit the group is working on (for Year 2/3)
   createdAt: string;
   updatedAt: string;
 }
