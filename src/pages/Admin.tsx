@@ -80,7 +80,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 const Admin: React.FC = () => {
-  const { groups, addGroup, updateGroup, deleteGroup, students, attendance, assessments, loading, ensureAllGroupsExist } = useDatabase();
+  const { groups, addGroup, updateGroup, deleteGroup, students, attendance, assessments, loading, ensureAllGroupsExist, bulkUpdateCurrentUnit } = useDatabase();
   const { user } = useAuth();
   
   const [tabValue, setTabValue] = useState(0);
@@ -111,6 +111,8 @@ const Admin: React.FC = () => {
   const [groupFilterYear, setGroupFilterYear] = useState<number | 'all'>('all');
   const [groupSearchText, setGroupSearchText] = useState('');
   const [groupSortBy, setGroupSortBy] = useState<'name' | 'year'>('name');
+  const [bulkUpdateYear, setBulkUpdateYear] = useState<number>(2);
+  const [bulkUpdateUnit, setBulkUpdateUnit] = useState<string>('');
   
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
@@ -516,6 +518,28 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleBulkUpdateUnit = async () => {
+    if (!bulkUpdateUnit) {
+      setError('Please select a unit');
+      return;
+    }
+
+    const groupCount = groups.filter(g => g.year === bulkUpdateYear).length;
+    const confirmMessage = `This will update the current unit to "${bulkUpdateUnit}" for all ${groupCount} groups in Year ${bulkUpdateYear}. Continue?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const updatedCount = await bulkUpdateCurrentUnit(bulkUpdateYear, bulkUpdateUnit);
+      setError(null);
+      alert(`Successfully updated ${updatedCount} groups to unit "${bulkUpdateUnit}"`);
+    } catch (error) {
+      setError('Failed to bulk update groups');
+    }
+  };
+
   if (user?.role !== 'admin') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -750,6 +774,82 @@ const Admin: React.FC = () => {
             Add Group
           </Button>
         </Box>
+
+        {/* Bulk Update Current Unit */}
+        <Card sx={{ mb: 3, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
+          <CardContent>
+            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+              Bulk Update Current Unit
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Update the current unit for all groups in a specific year at once
+            </Typography>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Select Year</InputLabel>
+                  <Select
+                    value={bulkUpdateYear}
+                    label="Select Year"
+                    onChange={(e) => {
+                      setBulkUpdateYear(e.target.value as number);
+                      setBulkUpdateUnit(''); // Reset unit when year changes
+                    }}
+                  >
+                    <MenuItem value={2}>Year 2</MenuItem>
+                    <MenuItem value={3}>Year 3</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Select Current Unit</InputLabel>
+                  <Select
+                    value={bulkUpdateUnit}
+                    label="Select Current Unit"
+                    onChange={(e) => setBulkUpdateUnit(e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>No unit selected</em>
+                    </MenuItem>
+                    {bulkUpdateYear === 2 && (
+                      <>
+                        <MenuItem value="MSK">MSK</MenuItem>
+                        <MenuItem value="HEM">HEM</MenuItem>
+                        <MenuItem value="CVS">CVS</MenuItem>
+                        <MenuItem value="Resp">Resp</MenuItem>
+                      </>
+                    )}
+                    {bulkUpdateYear === 3 && (
+                      <>
+                        <MenuItem value="GIT">GIT</MenuItem>
+                        <MenuItem value="GUT">GUT</MenuItem>
+                        <MenuItem value="Neuro">Neuro</MenuItem>
+                        <MenuItem value="END">END</MenuItem>
+                      </>
+                    )}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <Typography variant="body2" color="text.secondary">
+                  Will update: {groups.filter(g => g.year === bulkUpdateYear).length} groups
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={2}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="primary"
+                  onClick={handleBulkUpdateUnit}
+                  disabled={!bulkUpdateUnit}
+                >
+                  Update All
+                </Button>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
 
         {/* Filters */}
         <Card sx={{ mb: 3 }}>

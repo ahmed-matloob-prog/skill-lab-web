@@ -78,6 +78,7 @@ interface DatabaseContextType {
   // Update operations
   updateGroupsToFullSet: () => Promise<void>;
   ensureAllGroupsExist: () => Promise<void>;
+  bulkUpdateCurrentUnit: (year: number, currentUnit: string) => Promise<number>;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
@@ -627,6 +628,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await refreshGroups();
   };
 
+  // Bulk update current unit for all groups in a year
+  const bulkUpdateCurrentUnit = async (year: number, currentUnit: string): Promise<number> => {
+    const updatedCount = await DatabaseService.bulkUpdateCurrentUnit(year, currentUnit);
+    await refreshGroups();
+
+    // Sync all updated groups to Firebase in background
+    if (updatedCount > 0) {
+      const allGroups = await DatabaseService.getGroups();
+      const updatedGroups = allGroups.filter(g => g.year === year);
+
+      updatedGroups.forEach(group => {
+        FirebaseSyncService.syncGroup(group).catch(error => {
+          logger.error(`Error syncing group ${group.name} to Firebase:`, error);
+        });
+      });
+
+      logger.log(`DatabaseContext: Syncing ${updatedCount} groups to Firebase after bulk unit update`);
+    }
+
+    return updatedCount;
+  };
+
   const value: DatabaseContextType = {
     // Data
     students,
@@ -694,6 +717,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Update operations
     updateGroupsToFullSet,
     ensureAllGroupsExist,
+    bulkUpdateCurrentUnit,
   };
 
   return (

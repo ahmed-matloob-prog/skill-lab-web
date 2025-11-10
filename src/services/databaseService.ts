@@ -663,6 +663,27 @@ class DatabaseService {
     // Admin can create custom groups through the UI instead
     logger.log('updateGroupsToFullSet called - groups are now managed manually');
   }
+
+  // Bulk update current unit for all groups in a specific year
+  async bulkUpdateCurrentUnit(year: number, currentUnit: string): Promise<number> {
+    const groups = await this.getGroups();
+    let updatedCount = 0;
+
+    const updatedGroups = groups.map(group => {
+      if (group.year === year) {
+        updatedCount++;
+        return {
+          ...group,
+          currentUnit: currentUnit || undefined,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return group;
+    });
+
+    localStorage.setItem(this.groupsKey, JSON.stringify(updatedGroups));
+    return updatedCount;
+  }
 }
 
 export default new DatabaseService();
