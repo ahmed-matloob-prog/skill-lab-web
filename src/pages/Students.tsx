@@ -87,7 +87,12 @@ const Students: React.FC = () => {
         return false;
       }
     }
-    if (selectedYear !== 'all' && student.year !== selectedYear) return false;
+    // Handle year filter with type coercion
+    if (selectedYear !== 'all') {
+      const studentYear = typeof student.year === 'string' ? Number(student.year) : student.year;
+      const filterYear = typeof selectedYear === 'string' ? Number(selectedYear) : selectedYear;
+      if (studentYear !== filterYear) return false;
+    }
     if (selectedGroup !== 'all' && student.groupId !== selectedGroup) return false;
     return true;
   });
@@ -114,8 +119,10 @@ const Students: React.FC = () => {
     totalStudents: students.length,
     filteredStudents: filteredStudents.length,
     selectedYear,
+    selectedYearType: typeof selectedYear,
     selectedGroup,
-    students: students.map(s => ({ name: s.name, year: s.year, groupId: s.groupId }))
+    students: students.map(s => ({ name: s.name, year: s.year, groupId: s.groupId })),
+    studentsMatchingGroup: selectedGroup !== 'all' ? students.filter(s => s.groupId === selectedGroup).map(s => s.name) : 'N/A'
   });
 
   // Debug: Log groups data
