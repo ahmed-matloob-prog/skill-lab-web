@@ -340,7 +340,13 @@ const Students: React.FC = () => {
 
       // Generate next student IDs
       const existingStudents = await DatabaseService.getStudents();
-      const existingStudentIds = existingStudents.map(s => parseInt(s.studentId.replace('S', '')));
+      const existingStudentIds = existingStudents
+        .map(s => {
+          const idStr = s.studentId.replace('S', '');
+          const id = parseInt(idStr);
+          return isNaN(id) ? 0 : id;
+        })
+        .filter(id => id > 0); // Filter out invalid IDs
       let nextId = existingStudentIds.length > 0 ? Math.max(...existingStudentIds) + 1 : 1;
 
       // Validate and prepare preview
