@@ -137,28 +137,6 @@ const Students: React.FC = () => {
         return groupYear === filterYear;
       });
 
-  // Debug: Log students data
-  logger.log('Students data:', {
-    totalStudents: students.length,
-    filteredStudents: filteredStudents.length,
-    selectedYear,
-    selectedYearType: typeof selectedYear,
-    selectedGroup,
-    students: students.map(s => ({ name: s.name, year: s.year, groupId: s.groupId })),
-    studentsMatchingGroup: selectedGroup !== 'all' ? students.filter(s => s.groupId === selectedGroup).map(s => s.name) : 'N/A'
-  });
-
-  // Debug: Log groups data
-  logger.log('Groups data:', {
-    totalGroups: groups.length,
-    accessibleGroups: accessibleGroups.length,
-    filteredGroupsForFilter: filteredGroupsForFilter.length,
-    selectedYear,
-    selectedYearType: typeof selectedYear,
-    userRole: user?.role,
-    groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year, yearType: typeof g.year })),
-    filteredGroups: filteredGroupsForFilter.map(g => ({ id: g.id, name: g.name, year: g.year }))
-  });
 
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
