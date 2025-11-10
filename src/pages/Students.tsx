@@ -102,7 +102,12 @@ const Students: React.FC = () => {
   // Filter groups for the filter dropdown - by selected year filter
   const filteredGroupsForFilter = selectedYear === 'all'
     ? accessibleGroups
-    : accessibleGroups.filter(group => group.year === Number(selectedYear));
+    : accessibleGroups.filter(group => {
+        // Handle both string and number types for robust comparison
+        const groupYear = typeof group.year === 'string' ? Number(group.year) : group.year;
+        const filterYear = typeof selectedYear === 'string' ? Number(selectedYear) : selectedYear;
+        return groupYear === filterYear;
+      });
 
   // Debug: Log students data
   logger.log('Students data:', {
@@ -121,7 +126,8 @@ const Students: React.FC = () => {
     selectedYear,
     selectedYearType: typeof selectedYear,
     userRole: user?.role,
-    groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year, yearType: typeof g.year }))
+    groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year, yearType: typeof g.year })),
+    filteredGroups: filteredGroupsForFilter.map(g => ({ id: g.id, name: g.name, year: g.year }))
   });
 
   const getGroupName = (groupId: string) => {
