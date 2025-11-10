@@ -93,8 +93,16 @@ const Students: React.FC = () => {
   });
 
   // Filter groups based on user permissions
-  const accessibleGroups = user?.role === 'admin' ? groups : 
+  const accessibleGroups = user?.role === 'admin' ? groups :
     groups.filter(group => user?.assignedGroups?.includes(group.id));
+
+  // Filter groups by the selected year in the form (for add/edit dialog)
+  const filteredGroupsForForm = accessibleGroups.filter(group => group.year === formData.year);
+
+  // Filter groups for the filter dropdown - by selected year filter
+  const filteredGroupsForFilter = selectedYear === 'all'
+    ? accessibleGroups
+    : accessibleGroups.filter(group => group.year === Number(selectedYear));
 
   // Debug: Log students data
   logger.log('Students data:', {
@@ -109,17 +117,12 @@ const Students: React.FC = () => {
   logger.log('Groups data:', {
     totalGroups: groups.length,
     accessibleGroups: accessibleGroups.length,
+    filteredGroupsForFilter: filteredGroupsForFilter.length,
+    selectedYear,
+    selectedYearType: typeof selectedYear,
     userRole: user?.role,
-    groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year }))
+    groups: groups.map(g => ({ id: g.id, name: g.name, year: g.year, yearType: typeof g.year }))
   });
-
-  // Filter groups by the selected year in the form (for add/edit dialog)
-  const filteredGroupsForForm = accessibleGroups.filter(group => group.year === formData.year);
-
-  // Filter groups for the filter dropdown - by selected year filter
-  const filteredGroupsForFilter = selectedYear === 'all'
-    ? accessibleGroups
-    : accessibleGroups.filter(group => group.year === selectedYear);
 
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
