@@ -1386,3 +1386,50 @@ export const exportGroupPerformanceSummary = (
     : `Group_Performance_Summary_AllYears_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(data, fileName);
 };
+
+// Export Groups List to Excel
+export const exportGroupsToExcel = (
+  groups: Group[],
+  students: Student[],
+  trainers: { groupId: string; trainerNames: string[] }[]
+): void => {
+  const exportData = groups.map(group => {
+    const studentCount = students.filter(s => s.groupId === group.id).length;
+    const groupTrainers = trainers.find(t => t.groupId === group.id);
+    const trainerNames = groupTrainers ? groupTrainers.trainerNames.join(', ') : 'No trainer assigned';
+
+    return {
+      'Group Name': group.name,
+      'Year': group.year,
+      'Current Unit': group.currentUnit || '-',
+      'Assigned Trainers': trainerNames,
+      'Student Count': studentCount,
+      'Description': group.description || '',
+      'Created At': new Date(group.createdAt).toLocaleDateString(),
+      'Updated At': new Date(group.updatedAt).toLocaleDateString(),
+    };
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Groups');
+
+  // Auto-size columns
+  const colWidths = [
+    { wch: 20 }, // Group Name
+    { wch: 8 },  // Year
+    { wch: 15 }, // Current Unit
+    { wch: 30 }, // Assigned Trainers
+    { wch: 12 }, // Student Count
+    { wch: 40 }, // Description
+    { wch: 12 }, // Created At
+    { wch: 12 }, // Updated At
+  ];
+  worksheet['!cols'] = colWidths;
+
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const fileName = `groups_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+  saveAs(data, fileName);
+};

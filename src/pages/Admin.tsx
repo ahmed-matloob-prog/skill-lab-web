@@ -29,6 +29,8 @@ import {
   Chip,
   IconButton,
   SelectChangeEvent,
+  Menu,
+  Tooltip,
 } from '@mui/material';
 import {
   Add,
@@ -40,6 +42,8 @@ import {
   Quiz,
   Download,
   Upload,
+  MoreVert,
+  FileDownload,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +52,7 @@ import { User, Group } from '../types';
 import AuthService from '../services/authService';
 import FirebaseUserService from '../services/firebaseUserService';
 import FirebasePasswordService from '../services/firebasePasswordService';
+import { exportGroupsToExcel } from '../utils/excelUtils';
 import AdminReport from './AdminReport';
 import TrainerReports from './TrainerReports';
 import NewYearReset from './NewYearReset';
@@ -119,6 +124,10 @@ const Admin: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
+  // Quick Actions Menu state
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+
   useEffect(() => {
     if (user?.role === 'admin') {
       logger.log('Admin: Loading users and setting up subscription');
@@ -167,6 +176,92 @@ const Admin: React.FC = () => {
   // Helper function to get trainers assigned to a group
   const getGroupTrainers = (groupId: string): User[] => {
     return users.filter(u => u.assignedGroups?.includes(groupId));
+  };
+
+  // Helper function to get last activity for a group
+  const getGroupLastActivity = (groupId: string): Date | null => {
+    const groupAttendance = attendance.filter(a => a.groupId === groupId);
+    const groupAssessments = assessments.filter(a => {
+      const student = students.find(s => s.id === a.studentId);
+      return student?.groupId === groupId;
+    });
+
+    const dates: Date[] = [];
+
+    groupAttendance.forEach(a => {
+      if (a.timestamp) dates.push(new Date(a.timestamp));
+    });
+
+    groupAssessments.forEach(a => {
+      if (a.timestamp) dates.push(new Date(a.timestamp));
+    });
+
+    if (dates.length === 0) return null;
+    return new Date(Math.max(...dates.map(d => d.getTime())));
+  };
+
+  // Helper function to format last activity
+  const formatLastActivity = (lastActivity: Date | null): string => {
+    if (!lastActivity) return 'No activity';
+
+    const now = new Date();
+    const diffMs = now.getTime() - lastActivity.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+    return `${Math.floor(diffDays / 365)} years ago`;
+  };
+
+  // Helper function to get activity status
+  const getActivityStatus = (lastActivity: Date | null): 'active' | 'warning' | 'inactive' => {
+    if (!lastActivity) return 'inactive';
+
+    const now = new Date();
+    const diffMs = now.getTime() - lastActivity.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 7) return 'active';
+    if (diffDays <= 30) return 'warning';
+    return 'inactive';
+  };
+
+  // Quick Actions Menu handlers
+  const handleQuickActionsClick = (event: React.MouseEvent<HTMLElement>, group: Group) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedGroup(group);
+  };
+
+  const handleQuickActionsClose = () => {
+    setAnchorEl(null);
+    setSelectedGroup(null);
+  };
+
+  const handleQuickEdit = () => {
+    if (selectedGroup) {
+      handleOpenGroupDialog(selectedGroup);
+      handleQuickActionsClose();
+    }
+  };
+
+  const handleQuickDelete = () => {
+    if (selectedGroup) {
+      handleDeleteGroup(selectedGroup.id);
+      handleQuickActionsClose();
+    }
+  };
+
+  // Export groups to Excel
+  const handleExportGroups = () => {
+    const trainersData = groups.map(group => ({
+      groupId: group.id,
+      trainerNames: getGroupTrainers(group.id).map(t => t.username)
+    }));
+
+    exportGroupsToExcel(groups, students, trainersData);
   };
 
   // User management functions
@@ -953,6 +1048,8 @@ const Admin: React.FC = () => {
                 <TableCell>Current Unit</TableCell>
                 <TableCell>Assigned Trainers</TableCell>
                 <TableCell>Students</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Last Activity</TableCell>
                 <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -1029,26 +1126,108 @@ const Admin: React.FC = () => {
                   <TableCell>
                     {students.filter(s => s.groupId === group.id).length}
                   </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const lastActivity = getGroupLastActivity(group.id);
+                      const status = getActivityStatus(lastActivity);
+                      const statusColors = {
+                        active: 'success',
+                        warning: 'warning',
+                        inactive: 'default'
+                      } as const;
+                      const statusLabels = {
+                        active: 'Active',
+                        warning: 'Less Active',
+                        inactive: 'Inactive'
+                      };
+                      return (
+                        <Chip
+                          label={statusLabels[status]}
+                          size="small"
+                          color={statusColors[status]}
+                          variant="filled"
+                        />
+                      );
+                    })()}
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const lastActivity = getGroupLastActivity(group.id);
+                      return (
+                        <Typography variant="body2" color="text.secondary">
+                          {formatLastActivity(lastActivity)}
+                        </Typography>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpenGroupDialog(group)}
-                    >
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteGroup(group.id)}
-                      color="error"
-                    >
-                      <Delete />
-                    </IconButton>
+                    <Tooltip title="Edit">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenGroupDialog(group)}
+                      >
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteGroup(group.id)}
+                        color="error"
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="More actions">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleQuickActionsClick(e, group)}
+                      >
+                        <MoreVert />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Export Button */}
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            variant="contained"
+            startIcon={<FileDownload />}
+            onClick={handleExportGroups}
+            disabled={groups.length === 0}
+          >
+            Export Groups to Excel
+          </Button>
+        </Box>
+
+        {/* Quick Actions Menu */}
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleQuickActionsClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+        >
+          <MenuItem onClick={handleQuickEdit}>
+            <Edit fontSize="small" sx={{ mr: 1 }} />
+            Edit Group
+          </MenuItem>
+          <MenuItem onClick={handleQuickDelete} sx={{ color: 'error.main' }}>
+            <Delete fontSize="small" sx={{ mr: 1 }} />
+            Delete Group
+          </MenuItem>
+        </Menu>
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
