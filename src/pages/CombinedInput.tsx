@@ -131,7 +131,11 @@ const CombinedInput: React.FC = () => {
     }
     if (selectedYear !== 'all' && student.year !== selectedYear) return false;
     if (selectedGroup !== 'all' && student.groupId !== selectedGroup) return false;
-    if (selectedUnit !== 'all' && student.unit !== selectedUnit) return false;
+    // Filter by group's currentUnit instead of student's unit field
+    if (selectedUnit !== 'all') {
+      const studentGroup = groups.find(g => g.id === student.groupId);
+      if (studentGroup?.currentUnit !== selectedUnit) return false;
+    }
     return true;
   });
 

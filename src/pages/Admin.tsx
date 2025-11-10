@@ -28,6 +28,7 @@ import {
   Paper,
   Chip,
   IconButton,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   Add,
@@ -111,9 +112,10 @@ const Admin: React.FC = () => {
   const [groupFilterYear, setGroupFilterYear] = useState<number | 'all'>('all');
   const [groupSearchText, setGroupSearchText] = useState('');
   const [groupSortBy, setGroupSortBy] = useState<'name' | 'year'>('name');
+  const [groupFilterTrainer, setGroupFilterTrainer] = useState<string>('all');
   const [bulkUpdateYear, setBulkUpdateYear] = useState<number>(2);
   const [bulkUpdateUnit, setBulkUpdateUnit] = useState<string>('');
-  
+
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
@@ -160,6 +162,11 @@ const Admin: React.FC = () => {
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+  };
+
+  // Helper function to get trainers assigned to a group
+  const getGroupTrainers = (groupId: string): User[] => {
+    return users.filter(u => u.assignedGroups?.includes(groupId));
   };
 
   // User management functions
@@ -803,31 +810,34 @@ const Admin: React.FC = () => {
               </Grid>
               <Grid item xs={12} sm={4}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Select Current Unit</InputLabel>
+                  <InputLabel id="bulk-unit-select-label">Select Current Unit</InputLabel>
                   <Select
+                    labelId="bulk-unit-select-label"
+                    id="bulk-unit-select"
                     value={bulkUpdateUnit}
                     label="Select Current Unit"
-                    onChange={(e) => setBulkUpdateUnit(e.target.value)}
+                    onChange={(e: SelectChangeEvent) => {
+                      const selectedValue = e.target.value;
+                      logger.log('Unit selected:', selectedValue);
+                      setBulkUpdateUnit(selectedValue);
+                    }}
+                    displayEmpty
                   >
                     <MenuItem value="">
                       <em>No unit selected</em>
                     </MenuItem>
-                    {bulkUpdateYear === 2 && (
-                      <>
-                        <MenuItem value="MSK">MSK</MenuItem>
-                        <MenuItem value="HEM">HEM</MenuItem>
-                        <MenuItem value="CVS">CVS</MenuItem>
-                        <MenuItem value="Resp">Resp</MenuItem>
-                      </>
-                    )}
-                    {bulkUpdateYear === 3 && (
-                      <>
-                        <MenuItem value="GIT">GIT</MenuItem>
-                        <MenuItem value="GUT">GUT</MenuItem>
-                        <MenuItem value="Neuro">Neuro</MenuItem>
-                        <MenuItem value="END">END</MenuItem>
-                      </>
-                    )}
+                    {bulkUpdateYear === 2 && [
+                      <MenuItem key="MSK" value="MSK">MSK</MenuItem>,
+                      <MenuItem key="HEM" value="HEM">HEM</MenuItem>,
+                      <MenuItem key="CVS" value="CVS">CVS</MenuItem>,
+                      <MenuItem key="Resp" value="Resp">Resp</MenuItem>
+                    ]}
+                    {bulkUpdateYear === 3 && [
+                      <MenuItem key="GIT" value="GIT">GIT</MenuItem>,
+                      <MenuItem key="GUT" value="GUT">GUT</MenuItem>,
+                      <MenuItem key="Neuro" value="Neuro">Neuro</MenuItem>,
+                      <MenuItem key="END" value="END">END</MenuItem>
+                    ]}
                   </Select>
                 </FormControl>
               </Grid>
@@ -855,7 +865,7 @@ const Admin: React.FC = () => {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={3}>
+              <Grid item xs={12} sm={2}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Filter by Year</InputLabel>
                   <Select
@@ -870,17 +880,34 @@ const Admin: React.FC = () => {
                   </Select>
                 </FormControl>
               </Grid>
+              <Grid item xs={12} sm={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Filter by Trainer</InputLabel>
+                  <Select
+                    value={groupFilterTrainer}
+                    label="Filter by Trainer"
+                    onChange={(e) => setGroupFilterTrainer(e.target.value)}
+                  >
+                    <MenuItem value="all">All Trainers</MenuItem>
+                    {users.filter(u => u.role === 'trainer').map(trainer => (
+                      <MenuItem key={trainer.id} value={trainer.id}>
+                        {trainer.username}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
                   size="small"
-                  label="Search by name or description"
+                  label="Search by name"
                   value={groupSearchText}
                   onChange={(e) => setGroupSearchText(e.target.value)}
                   placeholder="Type to search..."
                 />
               </Grid>
-              <Grid item xs={12} sm={3}>
+              <Grid item xs={12} sm={2}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Sort By</InputLabel>
                   <Select
@@ -899,6 +926,7 @@ const Admin: React.FC = () => {
                   variant="outlined"
                   onClick={() => {
                     setGroupFilterYear('all');
+                    setGroupFilterTrainer('all');
                     setGroupSearchText('');
                     setGroupSortBy('name');
                   }}
@@ -923,7 +951,7 @@ const Admin: React.FC = () => {
                 <TableCell>Group Name</TableCell>
                 <TableCell>Year</TableCell>
                 <TableCell>Current Unit</TableCell>
-                <TableCell>Description</TableCell>
+                <TableCell>Assigned Trainers</TableCell>
                 <TableCell>Students</TableCell>
                 <TableCell align="center">Actions</TableCell>
               </TableRow>
@@ -936,6 +964,14 @@ const Admin: React.FC = () => {
                 // Filter by year
                 if (groupFilterYear !== 'all') {
                   filtered = filtered.filter(g => g.year === groupFilterYear);
+                }
+
+                // Filter by trainer
+                if (groupFilterTrainer !== 'all') {
+                  filtered = filtered.filter(g => {
+                    const trainers = getGroupTrainers(g.id);
+                    return trainers.some(t => t.id === groupFilterTrainer);
+                  });
                 }
 
                 // Filter by search text
@@ -969,7 +1005,27 @@ const Admin: React.FC = () => {
                       <Typography variant="body2" color="text.secondary">-</Typography>
                     )}
                   </TableCell>
-                  <TableCell>{group.description}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const trainers = getGroupTrainers(group.id);
+                      if (trainers.length === 0) {
+                        return <Typography variant="body2" color="text.secondary">No trainer assigned</Typography>;
+                      }
+                      return (
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                          {trainers.map(trainer => (
+                            <Chip
+                              key={trainer.id}
+                              label={trainer.username}
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                            />
+                          ))}
+                        </Box>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>
                     {students.filter(s => s.groupId === group.id).length}
                   </TableCell>
@@ -1218,31 +1274,32 @@ const Admin: React.FC = () => {
             {(groupForm.year === 2 || groupForm.year === 3) && (
               <Grid item xs={12}>
                 <FormControl fullWidth>
-                  <InputLabel>Current Unit (Optional)</InputLabel>
+                  <InputLabel id="group-unit-select-label">Current Unit (Optional)</InputLabel>
                   <Select
+                    labelId="group-unit-select-label"
+                    id="group-unit-select"
                     value={groupForm.currentUnit}
                     label="Current Unit (Optional)"
-                    onChange={(e) => setGroupForm({ ...groupForm, currentUnit: e.target.value })}
+                    onChange={(e: SelectChangeEvent) => {
+                      setGroupForm({ ...groupForm, currentUnit: e.target.value });
+                    }}
+                    displayEmpty
                   >
                     <MenuItem value="">
                       <em>No unit selected</em>
                     </MenuItem>
-                    {groupForm.year === 2 && (
-                      <>
-                        <MenuItem value="MSK">MSK</MenuItem>
-                        <MenuItem value="HEM">HEM</MenuItem>
-                        <MenuItem value="CVS">CVS</MenuItem>
-                        <MenuItem value="Resp">Resp</MenuItem>
-                      </>
-                    )}
-                    {groupForm.year === 3 && (
-                      <>
-                        <MenuItem value="GIT">GIT</MenuItem>
-                        <MenuItem value="GUT">GUT</MenuItem>
-                        <MenuItem value="Neuro">Neuro</MenuItem>
-                        <MenuItem value="END">END</MenuItem>
-                      </>
-                    )}
+                    {groupForm.year === 2 && [
+                      <MenuItem key="MSK" value="MSK">MSK</MenuItem>,
+                      <MenuItem key="HEM" value="HEM">HEM</MenuItem>,
+                      <MenuItem key="CVS" value="CVS">CVS</MenuItem>,
+                      <MenuItem key="Resp" value="Resp">Resp</MenuItem>
+                    ]}
+                    {groupForm.year === 3 && [
+                      <MenuItem key="GIT" value="GIT">GIT</MenuItem>,
+                      <MenuItem key="GUT" value="GUT">GUT</MenuItem>,
+                      <MenuItem key="Neuro" value="Neuro">Neuro</MenuItem>,
+                      <MenuItem key="END" value="END">END</MenuItem>
+                    ]}
                   </Select>
                 </FormControl>
               </Grid>

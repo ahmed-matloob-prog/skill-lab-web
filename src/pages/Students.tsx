@@ -142,6 +142,11 @@ const Students: React.FC = () => {
     return group ? group.name : 'Unknown Group';
   };
 
+  const getGroupCurrentUnit = (groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    return group?.currentUnit || null;
+  };
+
   const handleOpenDialog = (student?: Student) => {
     if (student) {
       setEditingStudent(student);
@@ -314,18 +319,21 @@ const Students: React.FC = () => {
         <Chip label={`Year ${params.value}`} size="small" />
       ),
     },
-    { 
-      field: 'unit', 
-      headerName: 'Unit', 
-      width: 100,
-      renderCell: (params) => (
-        <Chip 
-          label={params.value || 'N/A'} 
-          size="small" 
-          color={params.value ? 'primary' : 'default'}
-          variant={params.value ? 'filled' : 'outlined'}
-        />
-      ),
+    {
+      field: 'unit',
+      headerName: 'Current Unit',
+      width: 120,
+      renderCell: (params) => {
+        const currentUnit = getGroupCurrentUnit(params.row.groupId);
+        return (
+          <Chip
+            label={currentUnit || 'N/A'}
+            size="small"
+            color={currentUnit ? 'primary' : 'default'}
+            variant={currentUnit ? 'filled' : 'outlined'}
+          />
+        );
+      },
     },
     { 
       field: 'groupId', 
