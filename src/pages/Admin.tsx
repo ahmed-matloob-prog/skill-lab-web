@@ -668,11 +668,18 @@ const Admin: React.FC = () => {
       </Typography>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="admin tabs">
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          aria-label="admin tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
           <Tab label="Overview" />
-          <Tab label="User Management" />
-          <Tab label="Group Management" />
-          <Tab label="System Statistics" />
+          <Tab label="Users" />
+          <Tab label="Groups" />
+          <Tab label="Statistics" />
           <Tab label="Grand Report" />
           <Tab label="Trainer Reports" />
           <Tab label="Data Repair" />
