@@ -43,6 +43,7 @@ const DataRepairTool: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [repairComplete, setRepairComplete] = useState(false);
+  const [scanComplete, setScanComplete] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [repairResult, setRepairResult] = useState<{ success: number; failed: number } | null>(null);
 
@@ -50,6 +51,7 @@ const DataRepairTool: React.FC = () => {
   const scanForIssues = async () => {
     setScanning(true);
     setRepairComplete(false);
+    setScanComplete(false);
     setRepairResult(null);
 
     try {
@@ -101,6 +103,7 @@ const DataRepairTool: React.FC = () => {
       });
 
       setIssues(foundIssues);
+      setScanComplete(true);
       logger.log(`Data Repair: Found ${foundIssues.length} issues`);
     } catch (error) {
       logger.error('Error scanning for issues:', error);
@@ -202,6 +205,20 @@ const DataRepairTool: React.FC = () => {
                 </Alert>
               )}
             </Box>
+          )}
+
+          {/* Scan Complete Message */}
+          {scanComplete && !scanning && (
+            <Alert
+              severity="info"
+              sx={{ mb: 3 }}
+              onClose={() => setScanComplete(false)}
+            >
+              <AlertTitle>Scan Complete</AlertTitle>
+              {issues.length === 0
+                ? 'No issues found. All student records are valid.'
+                : `Found ${issues.length} issue(s) that need attention.`}
+            </Alert>
           )}
 
           {/* Repair Result */}
