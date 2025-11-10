@@ -349,10 +349,18 @@ const Students: React.FC = () => {
         .filter(id => id > 0); // Filter out invalid IDs
       let nextId = existingStudentIds.length > 0 ? Math.max(...existingStudentIds) + 1 : 1;
 
+      // Create lookup maps for O(1) performance instead of O(n²)
+      const existingStudentsByName = new Map(
+        existingStudents.map(s => [s.name.toLowerCase(), s])
+      );
+      const groupsByName = new Map(
+        groups.map(g => [g.name, g])
+      );
+
       // Validate and prepare preview
       const preview = parsedStudents.map(student => {
         // Check if group exists
-        const group = groups.find(g => g.name === student.groupId);
+        const group = groupsByName.get(student.groupId);
         if (!group) {
           return {
             ...student,
@@ -362,9 +370,7 @@ const Students: React.FC = () => {
         }
 
         // Check if student with same name already exists
-        const existingStudent = existingStudents.find(s =>
-          s.name.toLowerCase() === student.name.toLowerCase()
-        );
+        const existingStudent = existingStudentsByName.get(student.name.toLowerCase());
 
         if (existingStudent) {
           return {
