@@ -375,8 +375,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await DatabaseService.deleteGroup(id);
     await refreshGroups();
 
-    // Note: Groups are not actually deleted from Firebase per business logic
-    // Only their related data (students, attendance, assessments) are removed
+    // Delete from Firebase in background
+    FirebaseSyncService.deleteGroup(id).catch(error => {
+      logger.error('Error deleting group from Firebase:', error);
+    });
   };
 
   const getGroupsByYear = async (year: number): Promise<Group[]> => {

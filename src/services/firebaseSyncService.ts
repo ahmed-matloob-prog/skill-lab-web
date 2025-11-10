@@ -285,6 +285,26 @@ class FirebaseSyncService {
   }
 
   /**
+   * Delete group from Firebase
+   */
+  async deleteGroup(groupId: string): Promise<void> {
+    if (!this.isAvailable()) return;
+
+    try {
+      if (this.isOnline) {
+        const docRef = doc(db!, COLLECTIONS.GROUPS, groupId);
+        await deleteDoc(docRef);
+        logger.log(`FirebaseSync: Group deleted - ${groupId}`);
+      } else {
+        this.queueOperation(COLLECTIONS.GROUPS, 'delete', groupId);
+      }
+    } catch (error) {
+      logger.error('FirebaseSync: Error deleting group:', error);
+      this.queueOperation(COLLECTIONS.GROUPS, 'delete', groupId);
+    }
+  }
+
+  /**
    * Fetch all groups from Firebase
    */
   async fetchGroups(): Promise<Group[]> {
