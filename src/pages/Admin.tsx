@@ -108,6 +108,9 @@ const Admin: React.FC = () => {
     description: '',
     currentUnit: '',
   });
+  const [groupFilterYear, setGroupFilterYear] = useState<number | 'all'>('all');
+  const [groupSearchText, setGroupSearchText] = useState('');
+  const [groupSortBy, setGroupSortBy] = useState<'name' | 'year'>('name');
   
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
@@ -725,7 +728,19 @@ const Admin: React.FC = () => {
       <TabPanel value={tabValue} index={2}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6">
-            Group Management ({groups.length} groups)
+            Group Management ({(() => {
+              let filtered = groups;
+              if (groupFilterYear !== 'all') {
+                filtered = filtered.filter(g => g.year === groupFilterYear);
+              }
+              if (groupSearchText) {
+                filtered = filtered.filter(g =>
+                  g.name.toLowerCase().includes(groupSearchText.toLowerCase()) ||
+                  g.description?.toLowerCase().includes(groupSearchText.toLowerCase())
+                );
+              }
+              return filtered.length;
+            })()} groups)
           </Typography>
           <Button
             variant="contained"
@@ -735,6 +750,65 @@ const Admin: React.FC = () => {
             Add Group
           </Button>
         </Box>
+
+        {/* Filters */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Filter by Year</InputLabel>
+                  <Select
+                    value={groupFilterYear}
+                    label="Filter by Year"
+                    onChange={(e) => setGroupFilterYear(e.target.value as number | 'all')}
+                  >
+                    <MenuItem value="all">All Years</MenuItem>
+                    {[1, 2, 3, 4, 5, 6].map(year => (
+                      <MenuItem key={year} value={year}>Year {year}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Search by name or description"
+                  value={groupSearchText}
+                  onChange={(e) => setGroupSearchText(e.target.value)}
+                  placeholder="Type to search..."
+                />
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Sort By</InputLabel>
+                  <Select
+                    value={groupSortBy}
+                    label="Sort By"
+                    onChange={(e) => setGroupSortBy(e.target.value as 'name' | 'year')}
+                  >
+                    <MenuItem value="name">Name (A-Z)</MenuItem>
+                    <MenuItem value="year">Year</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={2}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  onClick={() => {
+                    setGroupFilterYear('all');
+                    setGroupSearchText('');
+                    setGroupSortBy('name');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
 
         {groups.length === 0 && (
           <Alert severity="info" sx={{ mb: 3 }}>
@@ -755,7 +829,34 @@ const Admin: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {groups.map((group) => (
+              {(() => {
+                // Filter groups
+                let filtered = groups;
+
+                // Filter by year
+                if (groupFilterYear !== 'all') {
+                  filtered = filtered.filter(g => g.year === groupFilterYear);
+                }
+
+                // Filter by search text
+                if (groupSearchText) {
+                  filtered = filtered.filter(g =>
+                    g.name.toLowerCase().includes(groupSearchText.toLowerCase()) ||
+                    g.description?.toLowerCase().includes(groupSearchText.toLowerCase())
+                  );
+                }
+
+                // Sort groups
+                filtered = [...filtered].sort((a, b) => {
+                  if (groupSortBy === 'name') {
+                    return a.name.localeCompare(b.name);
+                  } else {
+                    return a.year - b.year || a.name.localeCompare(b.name);
+                  }
+                });
+
+                return filtered;
+              })().map((group) => (
                 <TableRow key={group.id}>
                   <TableCell>{group.name}</TableCell>
                   <TableCell>
