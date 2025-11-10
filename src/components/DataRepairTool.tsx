@@ -38,7 +38,7 @@ interface RepairIssue {
 }
 
 const DataRepairTool: React.FC = () => {
-  const { students, groups } = useDatabase();
+  const { students, groups, updateStudent } = useDatabase();
   const [issues, setIssues] = useState<RepairIssue[]>([]);
   const [scanning, setScanning] = useState(false);
   const [repairing, setRepairing] = useState(false);
@@ -109,10 +109,10 @@ const DataRepairTool: React.FC = () => {
     }
   };
 
-  // Auto-scan on mount
+  // Auto-scan on mount and when students change
   useEffect(() => {
     scanForIssues();
-  }, [students.length]);
+  }, [students]);
 
   // Repair all issues
   const handleRepairAll = async () => {
@@ -123,10 +123,10 @@ const DataRepairTool: React.FC = () => {
       let successCount = 0;
       let failedCount = 0;
 
-      // Process each issue
+      // Process each issue using context's updateStudent (triggers refresh & Firebase sync)
       for (const issue of issues) {
         try {
-          await DatabaseService.updateStudent(issue.studentId, {
+          await updateStudent(issue.studentId, {
             studentId: issue.suggestedId
           });
           successCount++;
@@ -140,10 +140,7 @@ const DataRepairTool: React.FC = () => {
       setRepairResult({ success: successCount, failed: failedCount });
       setRepairComplete(true);
 
-      // Rescan after repair
-      setTimeout(() => {
-        scanForIssues();
-      }, 1000);
+      // The students array in context will update automatically, triggering useEffect to rescan
 
     } catch (error) {
       logger.error('Error during repair:', error);
