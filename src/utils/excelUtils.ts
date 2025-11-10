@@ -1433,3 +1433,210 @@ export const exportGroupsToExcel = (
   const fileName = `groups_export_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(data, fileName);
 };
+
+// Import Students by Groups from Excel
+export const importStudentsByGroupsFromExcel = (file: File): Promise<{
+  students: Array<{ name: string; groupId: string; year: number }>;
+  errors: string[];
+  warnings: string[];
+}> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Get the range of the worksheet
+        const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+
+        const students: Array<{ name: string; groupId: string; year: number }> = [];
+        const errors: string[] = [];
+        const warnings: string[] = [];
+
+        // Read column headers (group IDs)
+        const groupHeaders: { [col: number]: string } = {};
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+          const cell = worksheet[cellAddress];
+          if (cell && cell.v) {
+            const groupId = String(cell.v).trim();
+            if (groupId) {
+              groupHeaders[col] = groupId;
+            }
+          }
+        }
+
+        if (Object.keys(groupHeaders).length === 0) {
+          errors.push('No group headers found in the first row');
+          resolve({ students, errors, warnings });
+          return;
+        }
+
+        // Read student names from each column
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const groupId = groupHeaders[col];
+          if (!groupId) continue;
+
+          // Extract year from group ID (e.g., "GroupA1-Y3" -> 3)
+          const yearMatch = groupId.match(/-Y(\d+)$/i);
+          let year = 1;
+          if (yearMatch) {
+            year = parseInt(yearMatch[1]);
+            if (isNaN(year) || year < 1 || year > 6) {
+              errors.push(`Invalid year in group "${groupId}". Year must be 1-6.`);
+              continue;
+            }
+          } else {
+            warnings.push(`Could not extract year from group "${groupId}". Defaulting to Year 1.`);
+          }
+
+          // Read student names starting from row 1 (0-indexed)
+          for (let row = 1; row <= range.e.r; row++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+            const cell = worksheet[cellAddress];
+
+            if (cell && cell.v) {
+              const studentName = String(cell.v).trim();
+
+              // Skip empty cells or separator rows
+              if (!studentName || studentName === '---' || studentName === '-') {
+                continue;
+              }
+
+              // Validate student name
+              if (studentName.length < 2) {
+                warnings.push(`Row ${row + 1}, Column "${groupId}": Name "${studentName}" is too short (min 2 characters)`);
+                continue;
+              }
+
+              if (studentName.length > 100) {
+                warnings.push(`Row ${row + 1}, Column "${groupId}": Name "${studentName}" is too long (max 100 characters)`);
+                continue;
+              }
+
+              students.push({
+                name: studentName,
+                groupId: groupId,
+                year: year
+              });
+            }
+          }
+        }
+
+        if (students.length === 0 && errors.length === 0) {
+          errors.push('No student data found in the file');
+        }
+
+        resolve({ students, errors, warnings });
+      } catch (error) {
+        reject(new Error(`Failed to parse Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Failed to read file'));
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+// Generate Excel template for bulk student import by groups
+export const generateStudentGroupImportTemplate = (groups: Group[]): void => {
+  // Group by year for better organization
+  const groupsByYear: { [year: number]: Group[] } = {};
+  groups.forEach(group => {
+    if (!groupsByYear[group.year]) {
+      groupsByYear[group.year] = [];
+    }
+    groupsByYear[group.year].push(group);
+  });
+
+  // Sort years
+  const years = Object.keys(groupsByYear).map(Number).sort((a, b) => a - b);
+
+  const workbook = XLSX.utils.book_new();
+
+  // Create a sheet for each year
+  years.forEach(year => {
+    const yearGroups = groupsByYear[year].sort((a, b) => a.name.localeCompare(b.name));
+
+    // Create headers (group IDs)
+    const headers = yearGroups.map(g => g.name);
+
+    // Create sample data rows
+    const sampleData: any[][] = [];
+    const maxSamples = 5; // Show 5 sample rows
+
+    for (let i = 0; i < maxSamples; i++) {
+      const row: any[] = [];
+      yearGroups.forEach((group, idx) => {
+        if (i === 0) {
+          row.push(`Student Name ${idx + 1}`);
+        } else if (i === 1) {
+          row.push(`Another Student ${idx + 1}`);
+        } else {
+          row.push(''); // Empty cells for remaining rows
+        }
+      });
+      sampleData.push(row);
+    }
+
+    // Combine headers and sample data
+    const sheetData = [headers, ...sampleData];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // Set column widths
+    const colWidths = yearGroups.map(() => ({ wch: 20 }));
+    worksheet['!cols'] = colWidths;
+
+    // Add sheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Year ${year}`);
+  });
+
+  // Add instructions sheet
+  const instructions = [
+    ['Bulk Student Import Template - Instructions'],
+    [''],
+    ['HOW TO USE THIS TEMPLATE:'],
+    ['1. Each sheet represents a different year (Year 1, Year 2, etc.)'],
+    ['2. Column headers are group IDs (e.g., GroupA1-Y3)'],
+    ['3. Enter student names in the cells below each group header'],
+    ['4. Leave cells empty if a group has fewer students'],
+    ['5. Student IDs will be auto-generated during import'],
+    [''],
+    ['IMPORTANT NOTES:'],
+    ['- Do NOT modify the column headers (group IDs)'],
+    ['- Student names must be 2-100 characters'],
+    ['- Empty cells are automatically skipped'],
+    ['- Each student will be assigned to the group in their column'],
+    ['- Year is extracted from group ID (e.g., GroupA1-Y3 = Year 3)'],
+    [''],
+    ['EXAMPLE:'],
+    ['GroupA1-Y3    | GroupA2-Y3    | GroupB1-Y2'],
+    ['Ahmed Ali     | Sara Khan     | Omar Hassan'],
+    ['Khaled Omar   | Zainab Ali    | Layla Saeed'],
+    ['Youssef Ali   |               | Ali Mahmoud'],
+    [''],
+    ['After filling in student names, save and upload this file to import.']
+  ];
+
+  const instructionsSheet = XLSX.utils.aoa_to_sheet(instructions);
+  instructionsSheet['!cols'] = [{ wch: 80 }];
+  XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions', true);
+
+  // Move instructions to the beginning
+  workbook.SheetNames.unshift(workbook.SheetNames.pop()!);
+
+  // Generate Excel file
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const fileName = `student_group_import_template_${new Date().toISOString().split('T')[0]}.xlsx`;
+  saveAs(data, fileName);
+};
