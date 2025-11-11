@@ -95,6 +95,11 @@ const Assessments: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingAssessment, setDeletingAssessment] = useState<AssessmentRecord | null>(null);
 
+  // Bulk delete (entire assessment group)
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [deletingAssessmentGroup, setDeletingAssessmentGroup] = useState<AssessmentRecord[] | null>(null);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+
   const assessmentTypes = [
     { value: 'exam', label: 'Exam' },
     { value: 'quiz', label: 'Quiz' },
@@ -327,6 +332,53 @@ const Assessments: React.FC = () => {
     } catch (error) {
       logger.error('Delete failed:', error);
       alert('Failed to delete assessment. Please try again.');
+    }
+  };
+
+  // Bulk delete handlers
+  const handleBulkDeleteClick = (assessments: AssessmentRecord[]) => {
+    // Only allow deletion of non-exported assessments
+    const deletableAssessments = assessments.filter(a => a.exportedToAdmin !== true);
+    if (deletableAssessments.length === 0) {
+      alert('Cannot delete exported assessments. All assessments in this group are locked.');
+      return;
+    }
+    setDeletingAssessmentGroup(deletableAssessments);
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (!deletingAssessmentGroup || deletingAssessmentGroup.length === 0) return;
+
+    setBulkDeleteLoading(true);
+    try {
+      let successCount = 0;
+      let failedCount = 0;
+
+      // Delete each assessment in the group
+      for (const assessment of deletingAssessmentGroup) {
+        try {
+          await deleteAssessmentRecord(assessment.id);
+          successCount++;
+        } catch (error) {
+          logger.error(`Failed to delete assessment for student ${assessment.studentId}:`, error);
+          failedCount++;
+        }
+      }
+
+      setBulkDeleteDialogOpen(false);
+      setDeletingAssessmentGroup(null);
+      await loadSavedAssessments();
+
+      alert(
+        `Delete complete!\n✅ Deleted: ${successCount}\n` +
+          (failedCount > 0 ? `❌ Failed: ${failedCount}` : '')
+      );
+    } catch (error) {
+      logger.error('Bulk delete failed:', error);
+      alert('Failed to delete assessments. Please try again.');
+    } finally {
+      setBulkDeleteLoading(false);
     }
   };
 
@@ -601,15 +653,26 @@ const Assessments: React.FC = () => {
                                       />
                                     )}
                                     {user?.role === 'trainer' && draftCount > 0 && (
-                                      <Button
-                                        variant="contained"
-                                        color="primary"
-                                        size="small"
-                                        startIcon={<Send />}
-                                        onClick={() => handleExportClick(group.assessments)}
-                                      >
-                                        Export to Admin
-                                      </Button>
+                                      <>
+                                        <Button
+                                          variant="contained"
+                                          color="primary"
+                                          size="small"
+                                          startIcon={<Send />}
+                                          onClick={() => handleExportClick(group.assessments)}
+                                        >
+                                          Export to Admin
+                                        </Button>
+                                        <Button
+                                          variant="outlined"
+                                          color="error"
+                                          size="small"
+                                          startIcon={<Delete />}
+                                          onClick={() => handleBulkDeleteClick(group.assessments)}
+                                        >
+                                          Delete All
+                                        </Button>
+                                      </>
                                     )}
                                   </>
                                 )}
@@ -814,6 +877,51 @@ const Assessments: React.FC = () => {
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDeleteConfirm}>
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteDialogOpen} onClose={() => setBulkDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Warning sx={{ mr: 1, color: 'error.main' }} />
+            Delete Entire Assessment
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {deletingAssessmentGroup && deletingAssessmentGroup.length > 0 && (
+            <>
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <strong>Warning:</strong> This action cannot be undone!
+              </Alert>
+              <Typography variant="body1" gutterBottom>
+                You are about to delete the entire assessment for <strong>{deletingAssessmentGroup.length} student(s)</strong>.
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Assessment: {deletingAssessmentGroup[0].assessmentName}<br />
+                Type: {deletingAssessmentGroup[0].assessmentType}<br />
+                Date: {deletingAssessmentGroup[0].date}<br />
+                Students affected: {deletingAssessmentGroup.length}
+              </Typography>
+              <Typography variant="body2" color="error.main" sx={{ mt: 2, fontWeight: 'bold' }}>
+                All draft scores for this assessment will be permanently deleted.
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteDialogOpen(false)} disabled={bulkDeleteLoading}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleBulkDeleteConfirm}
+            disabled={bulkDeleteLoading}
+            startIcon={bulkDeleteLoading ? <CircularProgress size={20} /> : <Delete />}
+          >
+            {bulkDeleteLoading ? 'Deleting...' : 'Delete All'}
           </Button>
         </DialogActions>
       </Dialog>

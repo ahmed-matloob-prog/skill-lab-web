@@ -77,12 +77,14 @@ const AdminReport: React.FC = () => {
 
   const generateGrandReport = () => {
     setLoadingReport(true);
-    
+
     try {
-      const filteredAttendance = selectedYear !== 'all' ? 
+      const filteredAttendance = selectedYear !== 'all' ?
         attendance.filter(a => a.year === selectedYear) : attendance;
-      const filteredAssessments = selectedYear !== 'all' ? 
-        assessments.filter(a => a.year === selectedYear) : assessments;
+      // Admin should only see exported assessments (no drafts)
+      const filteredAssessments = selectedYear !== 'all' ?
+        assessments.filter(a => a.year === selectedYear && a.exportedToAdmin === true) :
+        assessments.filter(a => a.exportedToAdmin === true);
       
       const groupFilteredAttendance = selectedGroup !== 'all' ? 
         filteredAttendance.filter(a => a.groupId === selectedGroup) : filteredAttendance;

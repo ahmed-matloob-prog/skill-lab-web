@@ -35,7 +35,8 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
 import { exportCombinedReportToExcel } from '../utils/excelUtils';
-import { Student } from '../types';
+import { Student, User } from '../types';
+import AuthService from '../services/authService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -66,20 +67,44 @@ function TabPanel(props: TabPanelProps) {
 const TrainerReports: React.FC = () => {
   const { students, groups, attendance, assessments, loading } = useDatabase();
   const { user } = useAuth();
-  
+
   const [selectedTrainer, setSelectedTrainer] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [tabValue, setTabValue] = useState(0);
   const [trainerStats, setTrainerStats] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
 
-  // Get all trainers from the system
-  const trainers = Array.from(new Set([
-    ...attendance.map(a => ({ id: a.trainerId, name: `Trainer ${a.trainerId.slice(-4)}` })),
-    ...assessments.map(a => ({ id: a.trainerId, name: `Trainer ${a.trainerId.slice(-4)}` }))
-  ])).filter((trainer, index, self) => 
-    index === self.findIndex(t => t.id === trainer.id)
-  );
+  // Load users on mount
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const usersData = await AuthService.getAllUsers();
+        setUsers(usersData);
+      } catch (error) {
+        logger.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, []);
+
+  // Helper function to get trainer name by ID
+  const getTrainerName = (trainerId: string): string => {
+    const trainer = users.find(u => u.id === trainerId);
+    return trainer ? trainer.username : `Unknown (${trainerId.slice(-4)})`;
+  };
+
+  // Get all unique trainer IDs from attendance and assessments
+  const trainerIds = Array.from(new Set([
+    ...attendance.map(a => a.trainerId),
+    ...assessments.map(a => a.trainerId)
+  ]));
+
+  // Create trainers list with proper names
+  const trainers = trainerIds.map(id => ({
+    id,
+    name: getTrainerName(id)
+  }));
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
