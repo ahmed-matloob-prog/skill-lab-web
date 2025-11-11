@@ -337,14 +337,21 @@ const Assessments: React.FC = () => {
 
   // Bulk delete handlers
   const handleBulkDeleteClick = (assessments: AssessmentRecord[]) => {
-    // Only allow deletion of non-exported assessments
-    const deletableAssessments = assessments.filter(a => a.exportedToAdmin !== true);
-    if (deletableAssessments.length === 0) {
-      alert('Cannot delete exported assessments. All assessments in this group are locked.');
-      return;
+    // Admin can delete any assessment, trainer can only delete drafts
+    if (user?.role === 'admin') {
+      // Admin can delete all assessments (including exported)
+      setDeletingAssessmentGroup(assessments);
+      setBulkDeleteDialogOpen(true);
+    } else {
+      // Trainer: Only allow deletion of non-exported assessments
+      const deletableAssessments = assessments.filter(a => a.exportedToAdmin !== true);
+      if (deletableAssessments.length === 0) {
+        alert('Cannot delete exported assessments. All assessments in this group are locked.');
+        return;
+      }
+      setDeletingAssessmentGroup(deletableAssessments);
+      setBulkDeleteDialogOpen(true);
     }
-    setDeletingAssessmentGroup(deletableAssessments);
-    setBulkDeleteDialogOpen(true);
   };
 
   const handleBulkDeleteConfirm = async () => {
@@ -628,12 +635,26 @@ const Assessments: React.FC = () => {
                               {/* Status & Actions */}
                               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                 {group.allExported ? (
-                                  <Chip
-                                    icon={<Lock />}
-                                    label="Exported to Admin"
-                                    color="primary"
-                                    variant="filled"
-                                  />
+                                  <>
+                                    <Chip
+                                      icon={<Lock />}
+                                      label="Exported to Admin"
+                                      color="primary"
+                                      variant="filled"
+                                    />
+                                    {/* Admin can delete exported assessments */}
+                                    {user?.role === 'admin' && (
+                                      <Button
+                                        variant="outlined"
+                                        color="error"
+                                        size="small"
+                                        startIcon={<Delete />}
+                                        onClick={() => handleBulkDeleteClick(group.assessments)}
+                                      >
+                                        Delete All
+                                      </Button>
+                                    )}
+                                  </>
                                 ) : (
                                   <>
                                     {draftCount > 0 && (
@@ -652,6 +673,7 @@ const Assessments: React.FC = () => {
                                         size="small"
                                       />
                                     )}
+                                    {/* Trainer: Export and Delete drafts */}
                                     {user?.role === 'trainer' && draftCount > 0 && (
                                       <>
                                         <Button
@@ -673,6 +695,18 @@ const Assessments: React.FC = () => {
                                           Delete All
                                         </Button>
                                       </>
+                                    )}
+                                    {/* Admin: Delete any assessment (draft or mixed) */}
+                                    {user?.role === 'admin' && (draftCount > 0 || exportedCount > 0) && (
+                                      <Button
+                                        variant="outlined"
+                                        color="error"
+                                        size="small"
+                                        startIcon={<Delete />}
+                                        onClick={() => handleBulkDeleteClick(group.assessments)}
+                                      >
+                                        Delete All
+                                      </Button>
                                     )}
                                   </>
                                 )}
@@ -905,7 +939,9 @@ const Assessments: React.FC = () => {
                 Students affected: {deletingAssessmentGroup.length}
               </Typography>
               <Typography variant="body2" color="error.main" sx={{ mt: 2, fontWeight: 'bold' }}>
-                All draft scores for this assessment will be permanently deleted.
+                {user?.role === 'admin'
+                  ? 'All scores for this assessment will be permanently deleted (including exported records).'
+                  : 'All draft scores for this assessment will be permanently deleted.'}
               </Typography>
             </>
           )}
