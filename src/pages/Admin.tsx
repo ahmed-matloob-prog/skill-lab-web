@@ -57,6 +57,7 @@ import AdminReport from './AdminReport';
 import TrainerReports from './TrainerReports';
 import NewYearReset from './NewYearReset';
 import DataRepairTool from '../components/DataRepairTool';
+import TrainerDiagnostic from '../components/TrainerDiagnostic';
 import { sanitizeString, validateUsername, validateEmail, validatePassword } from '../utils/validator';
 import { hashPassword } from '../utils/passwordUtils';
 
@@ -683,6 +684,7 @@ const Admin: React.FC = () => {
           <Tab label="Grand Report" />
           <Tab label="Trainer Reports" />
           <Tab label="Data Repair" />
+          <Tab label="Diagnostic" />
           <Tab label="New Year Setup" />
         </Tabs>
       </Box>
@@ -1302,6 +1304,10 @@ const Admin: React.FC = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={7}>
+        <TrainerDiagnostic />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={8}>
         <NewYearReset />
       </TabPanel>
 
