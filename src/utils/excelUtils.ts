@@ -1172,19 +1172,17 @@ export const exportGroupPerformanceSummary = (
     // Count students needing attention
     const needAttentionCount = studentAverages.filter(s => s.average < 60 && s.average > 0).length;
 
-    // Get trainer (from attendance/assessment records)
-    const trainerIdsSet = new Set([
-      ...groupAttendance.map(a => a.trainerId),
-      ...groupAssessments.map(a => a.trainerId)
-    ]);
-    const trainerIds = Array.from(trainerIdsSet);
+    // Get trainer assigned to this group
+    // Find trainer by checking assignedGroups array (correct way)
+    const assignedTrainer = users.find(u =>
+      u.role === 'trainer' &&
+      u.assignedGroups &&
+      u.assignedGroups.includes(group.id)
+    );
 
-    // Get trainer name from users array
-    let trainerName = 'Unassigned';
-    if (trainerIds.length > 0) {
-      const trainer = users.find(u => u.id === trainerIds[0]);
-      trainerName = trainer ? trainer.username : `Unknown (${trainerIds[0].slice(-4)})`;
-    }
+    const trainerName = assignedTrainer
+      ? assignedTrainer.username
+      : 'Unassigned';
 
     // Performance status
     let performanceStatus = 'N/A';
