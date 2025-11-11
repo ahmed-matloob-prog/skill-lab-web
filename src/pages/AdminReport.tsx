@@ -34,17 +34,19 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
 import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary } from '../utils/excelUtils';
-import { Student } from '../types';
+import { Student, User } from '../types';
+import AuthService from '../services/authService';
 
 const AdminReport: React.FC = () => {
   const { students, groups, attendance, assessments, loading } = useDatabase();
   const { user } = useAuth();
-  
+
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [reportData, setReportData] = useState<any[]>([]);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
   const [summaryStats, setSummaryStats] = useState({
     totalStudents: 0,
     totalGroups: 0,
@@ -199,12 +201,26 @@ const AdminReport: React.FC = () => {
         assessments,
         students,
         groups,
+        users,
         year
       );
     } catch (error) {
       logger.error('Group performance export failed:', error);
     }
   };
+
+  // Load users on mount
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const usersData = await AuthService.getAllUsers();
+        setUsers(usersData);
+      } catch (error) {
+        logger.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, []);
 
   useEffect(() => {
     if (selectedYear !== 'all' || selectedGroup !== 'all') {

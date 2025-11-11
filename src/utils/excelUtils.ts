@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { Student, Group, AttendanceRecord, AssessmentRecord } from '../types';
+import { Student, Group, AttendanceRecord, AssessmentRecord, User } from '../types';
 
 // Excel Import Functions
 export const importStudentsFromExcel = (file: File): Promise<{
@@ -1098,6 +1098,7 @@ export const exportGroupPerformanceSummary = (
   assessments: AssessmentRecord[],
   students: Student[],
   groups: Group[],
+  users: User[],
   year?: number
 ): void => {
   const exportDate = new Date().toLocaleDateString('en-US', {
@@ -1177,7 +1178,13 @@ export const exportGroupPerformanceSummary = (
       ...groupAssessments.map(a => a.trainerId)
     ]);
     const trainerIds = Array.from(trainerIdsSet);
-    const trainerName = trainerIds.length > 0 ? `Trainer ${trainerIds[0].slice(-4)}` : 'Unassigned';
+
+    // Get trainer name from users array
+    let trainerName = 'Unassigned';
+    if (trainerIds.length > 0) {
+      const trainer = users.find(u => u.id === trainerIds[0]);
+      trainerName = trainer ? trainer.username : `Unknown (${trainerIds[0].slice(-4)})`;
+    }
 
     // Performance status
     let performanceStatus = 'N/A';

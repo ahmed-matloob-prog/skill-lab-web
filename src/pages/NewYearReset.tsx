@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -34,6 +34,8 @@ import {
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
+import { User } from '../types';
+import AuthService from '../services/authService';
 import {
   exportStudentsToExcel,
   exportAttendanceToExcel,
@@ -58,6 +60,20 @@ const NewYearReset: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [confirmText, setConfirmText] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+
+  // Load users on mount
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const usersData = await AuthService.getAllUsers();
+        setUsers(usersData);
+      } catch (error) {
+        logger.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, []);
 
   const [options, setOptions] = useState({
     exportBeforeClearing: true,
@@ -118,7 +134,7 @@ const NewYearReset: React.FC = () => {
         exportSimplifiedReportToExcel(assessments, students, groups);
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        exportGroupPerformanceSummary(attendance, assessments, students, groups);
+        exportGroupPerformanceSummary(attendance, assessments, students, groups, users);
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
