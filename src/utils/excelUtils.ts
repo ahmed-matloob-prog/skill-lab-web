@@ -1172,8 +1172,9 @@ export const exportGroupPerformanceSummary = (
     // Count students needing attention
     const needAttentionCount = studentAverages.filter(s => s.average < 60 && s.average > 0).length;
 
-    // Get trainer assigned to this group
-    // Find all trainers assigned to this group
+    // Get trainer assigned to this group (OFFICIAL ASSIGNMENT ONLY)
+    // This uses the assignedGroups field from User Management
+    // It does NOT use attendance/assessment records to avoid showing substitutes
     const assignedTrainers = users.filter(u =>
       u.role === 'trainer' &&
       u.assignedGroups &&
@@ -1182,28 +1183,8 @@ export const exportGroupPerformanceSummary = (
 
     let trainerName = 'Unassigned';
     if (assignedTrainers.length > 0) {
-      if (assignedTrainers.length === 1) {
-        // Single trainer assigned
-        trainerName = assignedTrainers[0].username;
-      } else {
-        // Multiple trainers - find who has most records for this group
-        const trainerWorkCount = assignedTrainers.map(trainer => ({
-          trainer,
-          count: groupAttendance.filter(a => a.trainerId === trainer.id).length +
-                 groupAssessments.filter(a => a.trainerId === trainer.id).length
-        }));
-
-        // Sort by work count descending
-        trainerWorkCount.sort((a, b) => b.count - a.count);
-
-        // Show primary trainer (most active) or all if needed
-        if (trainerWorkCount[0].count > 0) {
-          trainerName = trainerWorkCount[0].trainer.username;
-        } else {
-          // No records yet, just show first assigned
-          trainerName = assignedTrainers[0].username;
-        }
-      }
+      // Show all assigned trainers if multiple
+      trainerName = assignedTrainers.map(t => t.username).join(', ');
     }
 
     // Performance status
