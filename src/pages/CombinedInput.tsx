@@ -32,7 +32,6 @@ import {
   Save,
   Assessment,
   People,
-  Download,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -42,7 +41,6 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
 import { Student, AttendanceRecord, AssessmentRecord } from '../types';
-import { exportCombinedReportToExcel, exportSimplifiedReportToExcel } from '../utils/excelUtils';
 
 const CombinedInput: React.FC = () => {
   const { 
@@ -342,23 +340,6 @@ const CombinedInput: React.FC = () => {
     }
   };
 
-  const handleExportCombinedReport = () => {
-    try {
-      const year = selectedYear !== 'all' ? selectedYear as number : undefined;
-      exportCombinedReportToExcel(attendance, assessments, students, groups, year);
-    } catch (error) {
-      setError('Failed to export combined report');
-    }
-  };
-
-  const handleExportSimplifiedReport = () => {
-    try {
-      const year = selectedYear !== 'all' ? selectedYear as number : undefined;
-      exportSimplifiedReportToExcel(assessments, students, groups, year);
-    } catch (error) {
-      setError('Failed to export simplified report');
-    }
-  };
 
   useEffect(() => {
     loadAttendanceForDate(selectedDate);
@@ -533,24 +514,6 @@ const CombinedInput: React.FC = () => {
               <Typography variant="h6">
                 Students - Combined Input ({filteredStudents.length})
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<Download />}
-                  onClick={handleExportSimplifiedReport}
-                  size="small"
-                >
-                  Export Simplified Report
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<Download />}
-                  onClick={handleExportCombinedReport}
-                  size="small"
-                >
-                  Export Full Report
-                </Button>
-              </Box>
             </Box>
             {filteredStudents.length === 0 ? (
               <Alert severity="info">
