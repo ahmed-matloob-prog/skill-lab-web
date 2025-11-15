@@ -1801,6 +1801,384 @@ export const exportGrandReportDetailedToExcel = (
   saveAs(data, fileName);
 };
 
+// Helper function to get week label (simplified - uses stored week number)
+const getWeekLabel = (weekNumber: number, unit: string, assessmentDate: Date): string => {
+  const formatDate = (d: Date) => {
+    const month = d.toLocaleDateString('en-US', { month: 'short' });
+    const day = d.getDate();
+    return `${month} ${day}`;
+  };
+
+  if (unit && unit !== '-') {
+    return `Week ${weekNumber} (${unit}) - ${formatDate(assessmentDate)}`;
+  }
+  return `Week ${weekNumber} - ${formatDate(assessmentDate)}`;
+};
+
+// Grand Report Weekly Export - Organize by week number instead of individual assessments
+export const exportGrandReportWeeklyToExcel = (
+  assessments: AssessmentRecord[],
+  students: Student[],
+  groups: Group[],
+  selectedYear: number | 'all',
+  selectedGroup: string
+): void => {
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  // Filter students based on selections
+  const filteredStudents = students.filter(student => {
+    const yearMatch = selectedYear === 'all' || student.year === selectedYear;
+    const groupMatch = selectedGroup === 'all' || student.groupId === selectedGroup;
+    return yearMatch && groupMatch;
+  });
+
+  // Filter assessments (only exported ones for admin)
+  const filteredAssessments = assessments.filter(a => {
+    const yearMatch = selectedYear === 'all' || a.year === selectedYear;
+    const groupMatch = selectedGroup === 'all' || a.groupId === selectedGroup;
+    return yearMatch && groupMatch && a.exportedToAdmin === true;
+  });
+
+  // Group assessments by week number (from stored field)
+  interface WeekData {
+    weekNumber: number;
+    assessment: AssessmentRecord; // Single assessment per week
+    date: Date;
+    unit: string;
+  }
+
+  const weekMap = new Map<number, WeekData>();
+
+  // Filter out assessments without week numbers and group by stored week
+  filteredAssessments
+    .filter(assessment => assessment.week !== undefined && assessment.week !== null)
+    .forEach(assessment => {
+      const weekNumber = assessment.week!;
+      const assessmentDate = new Date(assessment.date);
+
+      // Since each week has exactly one assessment, just store it directly
+      weekMap.set(weekNumber, {
+        weekNumber,
+        assessment,
+        date: assessmentDate,
+        unit: assessment.unit || '-'
+      });
+    });
+
+  // Sort weeks by week number
+  const sortedWeeks = Array.from(weekMap.values()).sort((a, b) => a.weekNumber - b.weekNumber);
+
+  // Calculate weekly scores for each student
+  interface StudentWeeklyData {
+    studentId: string;
+    studentName: string;
+    year: number;
+    unit: string;
+    groupName: string;
+    weeklyScores: Map<number, { percentage: number; assessmentCount: number; unit: string }>;
+    annualAverage: number;
+    attendancePercentage: number;
+  }
+
+  const studentWeeklyData: StudentWeeklyData[] = filteredStudents.map(student => {
+    const weeklyScores = new Map<number, { percentage: number; assessmentCount: number; unit: string }>();
+    const studentAssessments = filteredAssessments.filter(a => a.studentId === student.id);
+
+    // Calculate scores for each week (simplified - one assessment per week)
+    sortedWeeks.forEach(week => {
+      // Find the single assessment for this week
+      const weekAssessment = studentAssessments.find(a => a.week === week.weekNumber);
+
+      if (weekAssessment) {
+        const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
+
+        weeklyScores.set(week.weekNumber, {
+          percentage,
+          assessmentCount: 1, // Always 1 since each week has one assessment
+          unit: week.unit
+        });
+      }
+    });
+
+    // Calculate annual average
+    const allPercentages = Array.from(weeklyScores.values()).map(w => w.percentage);
+    const annualAverage = allPercentages.length > 0
+      ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
+      : 0;
+
+    // Get group name
+    const group = groups.find(g => g.id === student.groupId);
+    const groupName = group ? group.name : 'Unknown';
+
+    return {
+      studentId: student.id,
+      studentName: student.name,
+      year: student.year,
+      unit: student.unit || '-',
+      groupName,
+      weeklyScores,
+      annualAverage,
+      attendancePercentage: 0 // Will be calculated if attendance data is passed
+    };
+  });
+
+  const workbook = XLSX.utils.book_new();
+
+  // ============= SHEET 1: Weekly Performance =============
+  const weeklyData: any[] = [];
+
+  // Header row 1 - Title
+  const headerRow1: any = {};
+  headerRow1['#'] = 'Grand Report - Week-Based View';
+  headerRow1['Student Name'] = selectedYear === 'all' ? 'All Years' : `Year ${selectedYear}`;
+  headerRow1['Year'] = `Export Date: ${exportDate}`;
+  headerRow1['Unit'] = '';
+  headerRow1['Group'] = '';
+
+  sortedWeeks.forEach(week => {
+    const weekLabel = getWeekLabel(week.weekNumber, week.unit, week.date);
+    headerRow1[weekLabel] = '';
+  });
+
+  headerRow1['Annual Average'] = '';
+  weeklyData.push(headerRow1);
+
+  // Header row 2 - Empty
+  const headerRow2: any = {};
+  headerRow2['#'] = '';
+  headerRow2['Student Name'] = '';
+  headerRow2['Year'] = '';
+  headerRow2['Unit'] = '';
+  headerRow2['Group'] = '';
+
+  sortedWeeks.forEach(week => {
+    const weekLabel = getWeekLabel(week.weekNumber, week.unit, week.date);
+    headerRow2[weekLabel] = '';
+  });
+
+  headerRow2['Annual Average'] = '';
+  weeklyData.push(headerRow2);
+
+  // Data rows
+  studentWeeklyData.forEach((student, index) => {
+    const rowData: any = {};
+    rowData['#'] = index + 1;
+    rowData['Student Name'] = student.studentName;
+    rowData['Year'] = student.year;
+    rowData['Unit'] = student.unit;
+    rowData['Group'] = student.groupName;
+
+    sortedWeeks.forEach(week => {
+      const weekLabel = getWeekLabel(week.weekNumber, week.unit, week.date);
+      const weekScore = student.weeklyScores.get(week.weekNumber);
+
+      if (weekScore) {
+        rowData[weekLabel] = `${weekScore.percentage}%`;
+      } else {
+        rowData[weekLabel] = '-';
+      }
+    });
+
+    rowData['Annual Average'] = `${student.annualAverage}%`;
+    weeklyData.push(rowData);
+  });
+
+  // Summary row - Empty
+  const emptyRow: any = {};
+  emptyRow['#'] = '';
+  emptyRow['Student Name'] = '';
+  emptyRow['Year'] = '';
+  emptyRow['Unit'] = '';
+  emptyRow['Group'] = '';
+
+  sortedWeeks.forEach(week => {
+    const weekLabel = getWeekLabel(week.weekNumber, week.unit, week.date);
+    emptyRow[weekLabel] = '';
+  });
+
+  emptyRow['Annual Average'] = '';
+  weeklyData.push(emptyRow);
+
+  // Summary row - Class averages
+  const summaryRow: any = {};
+  summaryRow['#'] = '';
+  summaryRow['Student Name'] = 'CLASS AVERAGE';
+  summaryRow['Year'] = '';
+  summaryRow['Unit'] = '';
+  summaryRow['Group'] = '';
+
+  sortedWeeks.forEach(week => {
+    const weekLabel = getWeekLabel(week.weekNumber, week.unit, week.date);
+    const weekScores: number[] = [];
+
+    studentWeeklyData.forEach(student => {
+      const weekScore = student.weeklyScores.get(week.weekNumber);
+      if (weekScore) {
+        weekScores.push(weekScore.percentage);
+      }
+    });
+
+    if (weekScores.length > 0) {
+      const avgPercentage = Math.round(weekScores.reduce((sum, s) => sum + s, 0) / weekScores.length);
+      summaryRow[weekLabel] = `${avgPercentage}%`;
+    } else {
+      summaryRow[weekLabel] = '-';
+    }
+  });
+
+  const allAnnualAverages = studentWeeklyData.map(s => s.annualAverage).filter(a => a > 0);
+  const classAnnualAverage = allAnnualAverages.length > 0
+    ? Math.round(allAnnualAverages.reduce((sum, a) => sum + a, 0) / allAnnualAverages.length)
+    : 0;
+
+  summaryRow['Annual Average'] = `${classAnnualAverage}%`;
+  weeklyData.push(summaryRow);
+
+  const sheet1 = XLSX.utils.json_to_sheet(weeklyData);
+
+  // Set column widths
+  const colWidths = [
+    { wch: 5 },  // #
+    { wch: 25 }, // Student Name
+    { wch: 8 },  // Year
+    { wch: 10 }, // Unit
+    { wch: 15 }, // Group
+    ...sortedWeeks.map(() => ({ wch: 18 })), // Each week column
+    { wch: 15 }, // Annual Average
+  ];
+  sheet1['!cols'] = colWidths;
+
+  // Freeze first 5 columns
+  sheet1['!freeze'] = { xSplit: 5, ySplit: 0 };
+
+  XLSX.utils.book_append_sheet(workbook, sheet1, 'Weekly Performance');
+
+  // ============= SHEET 2: Week Details =============
+  const weekDetailsData: any[] = [];
+
+  weekDetailsData.push({
+    'Week Number': 'Week Details - Assessment Breakdown',
+    'Date Range': `Export Date: ${exportDate}`,
+    'Unit(s)': '',
+    'Assessment Count': '',
+    'Assessment Names': '',
+  });
+
+  weekDetailsData.push({
+    'Week Number': '',
+    'Date Range': '',
+    'Unit(s)': '',
+    'Assessment Count': '',
+    'Assessment Names': '',
+  });
+
+  sortedWeeks.forEach(week => {
+    const weekLabel = getWeekLabel(week.weekNumber, week.unit, week.date);
+    const dateStr = week.date.toLocaleDateString();
+
+    weekDetailsData.push({
+      'Week Number': weekLabel,
+      'Date Range': dateStr,
+      'Unit(s)': week.unit,
+      'Assessment Count': 1, // Always 1 since each week has one assessment
+      'Assessment Names': week.assessment.assessmentName,
+    });
+  });
+
+  const sheet2 = XLSX.utils.json_to_sheet(weekDetailsData);
+
+  sheet2['!cols'] = [
+    { wch: 20 }, // Week Number
+    { wch: 25 }, // Date Range
+    { wch: 15 }, // Unit(s)
+    { wch: 18 }, // Assessment Count
+    { wch: 50 }, // Assessment Names
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet2, 'Week Details');
+
+  // ============= SHEET 3: Summary Statistics =============
+  const statsData: any[] = [];
+
+  statsData.push({
+    'Metric': 'Grand Report Summary - Week-Based View',
+    'Value': `Export Date: ${exportDate}`,
+    'Details': selectedYear === 'all' ? 'All Years' : `Year ${selectedYear}`,
+  });
+
+  statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+  statsData.push({ 'Metric': '=== Overall Statistics ===', 'Value': '', 'Details': '' });
+  statsData.push({ 'Metric': 'Total Students', 'Value': filteredStudents.length, 'Details': 'Enrolled students' });
+  statsData.push({ 'Metric': 'Total Weeks', 'Value': sortedWeeks.length, 'Details': 'Weeks with assessments' });
+  statsData.push({ 'Metric': 'Total Assessments', 'Value': filteredAssessments.length, 'Details': 'All assessments' });
+  statsData.push({ 'Metric': 'Class Annual Average', 'Value': `${classAnnualAverage}%`, 'Details': 'Average across all students' });
+
+  statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+  statsData.push({ 'Metric': '=== Weekly Performance ===', 'Value': '', 'Details': '' });
+
+  // Find strongest and weakest weeks
+  const weekAverages = sortedWeeks.map(week => {
+    const weekScores: number[] = [];
+    studentWeeklyData.forEach(student => {
+      const weekScore = student.weeklyScores.get(week.weekNumber);
+      if (weekScore) {
+        weekScores.push(weekScore.percentage);
+      }
+    });
+
+    const avg = weekScores.length > 0
+      ? Math.round(weekScores.reduce((sum, s) => sum + s, 0) / weekScores.length)
+      : 0;
+
+    return {
+      weekNumber: week.weekNumber,
+      weekLabel: getWeekLabel(week.weekNumber, week.unit, week.date),
+      average: avg
+    };
+  }).filter(w => w.average > 0);
+
+  if (weekAverages.length > 0) {
+    const strongestWeek = weekAverages.reduce((max, w) => w.average > max.average ? w : max);
+    const weakestWeek = weekAverages.reduce((min, w) => w.average < min.average ? w : min);
+
+    statsData.push({
+      'Metric': 'Strongest Week',
+      'Value': `${strongestWeek.weekLabel}`,
+      'Details': `${strongestWeek.average}% average`
+    });
+
+    statsData.push({
+      'Metric': 'Weakest Week',
+      'Value': `${weakestWeek.weekLabel}`,
+      'Details': `${weakestWeek.average}% average`
+    });
+  }
+
+  const sheet3 = XLSX.utils.json_to_sheet(statsData);
+
+  sheet3['!cols'] = [
+    { wch: 35 }, // Metric
+    { wch: 25 }, // Value
+    { wch: 35 }, // Details
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet3, 'Statistics');
+
+  // Generate Excel file
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const fileName = selectedYear === 'all'
+    ? `Grand_Report_Weekly_AllYears_${new Date().toISOString().split('T')[0]}.xlsx`
+    : `Grand_Report_Weekly_Year${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+  saveAs(data, fileName);
+};
+
 // Generate Excel template for bulk student import by groups
 export const generateStudentGroupImportTemplate = (groups: Group[]): void => {
   // Group by year for better organization

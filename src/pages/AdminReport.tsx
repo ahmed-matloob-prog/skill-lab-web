@@ -21,6 +21,9 @@ import {
   Paper,
   Chip,
   Divider,
+  ToggleButtonGroup,
+  ToggleButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Download,
@@ -31,11 +34,13 @@ import {
   BarChart,
   ViewList,
   TableChart,
+  CalendarToday,
+  ViewModule,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
-import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary, exportGrandReportDetailedToExcel } from '../utils/excelUtils';
+import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary, exportGrandReportDetailedToExcel, exportGrandReportWeeklyToExcel } from '../utils/excelUtils';
 import { Student, User } from '../types';
 import AuthService from '../services/authService';
 
@@ -49,7 +54,9 @@ const AdminReport: React.FC = () => {
   const [reportData, setReportData] = useState<any[]>([]);
   const [detailedReportData, setDetailedReportData] = useState<any[]>([]);
   const [uniqueAssessments, setUniqueAssessments] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
+  const [viewMode, setViewMode] = useState<'summary' | 'detailed' | 'weekly'>('summary');
+  const [weeklyReportData, setWeeklyReportData] = useState<any[]>([]);
+  const [sortedWeeks, setSortedWeeks] = useState<any[]>([]);
   const [loadingReport, setLoadingReport] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [summaryStats, setSummaryStats] = useState({
@@ -68,6 +75,7 @@ const AdminReport: React.FC = () => {
   const filteredStudents = students.filter(student => {
     if (selectedYear !== 'all' && student.year !== selectedYear) return false;
     if (selectedGroup !== 'all' && student.groupId !== selectedGroup) return false;
+    if (selectedUnit && student.unit !== selectedUnit) return false;
     return true;
   });
 
@@ -239,6 +247,97 @@ const AdminReport: React.FC = () => {
       });
 
       setDetailedReportData(detailedData);
+
+      // ============= GENERATE WEEK-BASED REPORT DATA =============
+      // Helper function to get week label (simplified - just show week number and unit)
+      const getWeekLabel = (weekNumber: number, unit: string, assessmentDate: Date): string => {
+        const formatDate = (d: Date) => {
+          const month = d.toLocaleDateString('en-US', { month: 'short' });
+          const day = d.getDate();
+          return `${month} ${day}`;
+        };
+
+        if (unit) {
+          return `Week ${weekNumber} (${unit}) - ${formatDate(assessmentDate)}`;
+        }
+        return `Week ${weekNumber} - ${formatDate(assessmentDate)}`;
+      };
+
+      // Group assessments by week number (from stored field)
+      interface WeekData {
+        weekNumber: number;
+        assessment: any; // Single assessment per week
+        date: Date;
+        unit: string;
+      }
+
+      const weekMap = new Map<number, WeekData>();
+
+      // Filter out assessments without week numbers
+      groupFilteredAssessments
+        .filter(assessment => assessment.week !== undefined && assessment.week !== null)
+        .forEach(assessment => {
+          const weekNumber = assessment.week!;
+          const assessmentDate = new Date(assessment.date);
+
+          // Since each week has exactly one assessment, just store it directly
+          weekMap.set(weekNumber, {
+            weekNumber,
+            assessment,
+            date: assessmentDate,
+            unit: assessment.unit || '-'
+          });
+        });
+
+      // Sort weeks by week number
+      const sortedWeeksList = Array.from(weekMap.values())
+        .sort((a, b) => a.weekNumber - b.weekNumber)
+        .map(week => ({
+          weekNumber: week.weekNumber,
+          label: getWeekLabel(week.weekNumber, week.unit, week.date),
+          unit: week.unit,
+          assessmentName: week.assessment.assessmentName
+        }));
+
+      setSortedWeeks(sortedWeeksList);
+
+      // Calculate weekly scores for each student (simplified - one assessment per week)
+      const weeklyData = filteredStudents.map((student, index) => {
+        const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
+        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number } } = {};
+
+        sortedWeeksList.forEach(week => {
+          // Find the single assessment for this week
+          const weekAssessment = studentAssessments.find(a => a.week === week.weekNumber);
+
+          if (weekAssessment) {
+            const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
+
+            weeklyScores[week.weekNumber] = {
+              percentage,
+              assessmentCount: 1 // Always 1 since each week has one assessment
+            };
+          }
+        });
+
+        // Calculate annual average
+        const allPercentages = Object.values(weeklyScores).map(w => w.percentage);
+        const annualAverage = allPercentages.length > 0
+          ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
+          : 0;
+
+        return {
+          rowNumber: index + 1,
+          studentName: student.name,
+          year: student.year,
+          unit: student.unit || '-',
+          groupName: getGroupName(student.groupId),
+          weeklyScores,
+          annualAverage
+        };
+      });
+
+      setWeeklyReportData(weeklyData);
     } catch (error) {
       logger.error('Error generating report:', error);
     } finally {
@@ -248,14 +347,25 @@ const AdminReport: React.FC = () => {
 
   const handleExportReport = () => {
     try {
-      // Always export detailed view with all individual assessment columns
-      exportGrandReportDetailedToExcel(
-        detailedReportData,
-        uniqueAssessments,
-        students,
-        groups,
-        selectedYear
-      );
+      if (viewMode === 'weekly') {
+        // Export week-based view
+        exportGrandReportWeeklyToExcel(
+          assessments,
+          students,
+          groups,
+          selectedYear,
+          selectedGroup
+        );
+      } else {
+        // Export detailed view with all individual assessment columns (default for summary and detailed modes)
+        exportGrandReportDetailedToExcel(
+          detailedReportData,
+          uniqueAssessments,
+          students,
+          groups,
+          selectedYear
+        );
+      }
     } catch (error) {
       logger.error('Export failed:', error);
     }
@@ -358,7 +468,7 @@ const AdminReport: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={3}>
               <FormControl fullWidth>
                 <InputLabel>Filter by Year</InputLabel>
                 <Select
@@ -373,7 +483,7 @@ const AdminReport: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={3}>
               <FormControl fullWidth>
                 <InputLabel>Filter by Group</InputLabel>
                 <Select
@@ -384,6 +494,22 @@ const AdminReport: React.FC = () => {
                   <MenuItem value="all">All Groups</MenuItem>
                   {filteredGroups.map(group => (
                     <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={2}>
+              <FormControl fullWidth>
+                <InputLabel>Filter by Unit</InputLabel>
+                <Select
+                  value={selectedUnit}
+                  label="Filter by Unit"
+                  onChange={(e) => setSelectedUnit(e.target.value)}
+                  disabled={selectedYear === 'all' || (selectedYear !== 2 && selectedYear !== 3)}
+                >
+                  <MenuItem value="">All Units</MenuItem>
+                  {units.map(unit => (
+                    <MenuItem key={unit} value={unit}>{unit}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -618,21 +744,48 @@ const AdminReport: React.FC = () => {
           ) : (
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
                   <Typography variant="h6">
-                    Detailed Student Report ({reportData.length} students)
+                    Student Report ({reportData.length} students)
                   </Typography>
-                  <Button
-                    variant="outlined"
+                  <ToggleButtonGroup
+                    value={viewMode}
+                    exclusive
+                    onChange={(e, newMode) => {
+                      if (newMode !== null) {
+                        setViewMode(newMode);
+                      }
+                    }}
                     size="small"
-                    startIcon={viewMode === 'summary' ? <TableChart /> : <ViewList />}
-                    onClick={() => setViewMode(viewMode === 'summary' ? 'detailed' : 'summary')}
                   >
-                    {viewMode === 'summary' ? 'Show Detailed Scores' : 'Show Summary'}
-                  </Button>
+                    <ToggleButton value="summary">
+                      <Tooltip title="Summary view with aggregated scores">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <ViewList fontSize="small" />
+                          <span>Summary</span>
+                        </Box>
+                      </Tooltip>
+                    </ToggleButton>
+                    <ToggleButton value="detailed">
+                      <Tooltip title="Detailed view with individual assessment scores">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <TableChart fontSize="small" />
+                          <span>By Assessment</span>
+                        </Box>
+                      </Tooltip>
+                    </ToggleButton>
+                    <ToggleButton value="weekly">
+                      <Tooltip title="Week-based view showing weekly performance">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <CalendarToday fontSize="small" />
+                          <span>By Week</span>
+                        </Box>
+                      </Tooltip>
+                    </ToggleButton>
+                  </ToggleButtonGroup>
                 </Box>
                 <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
-                  {viewMode === 'summary' ? (
+                  {viewMode === 'summary' && (
                     <Table>
                       <TableHead>
                         <TableRow>
@@ -677,7 +830,8 @@ const AdminReport: React.FC = () => {
                         ))}
                       </TableBody>
                     </Table>
-                  ) : (
+                  )}
+                  {viewMode === 'detailed' && (
                     <Table size="small" sx={{ minWidth: 1200 }}>
                       <TableHead>
                         <TableRow>
@@ -749,6 +903,83 @@ const AdminReport: React.FC = () => {
                               <Chip
                                 label={`${student.attendancePercentage}%`}
                                 color={student.attendancePercentage >= 85 ? 'success' : student.attendancePercentage >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                  {viewMode === 'weekly' && (
+                    <Table size="small" sx={{ minWidth: 1200 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>#</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Student Name</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 220, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Year</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Unit</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Group</TableCell>
+                          {/* Dynamic week columns */}
+                          {sortedWeeks.map((week, idx) => (
+                            <TableCell key={idx} align="center" sx={{ fontWeight: 'bold', minWidth: 120 }}>
+                              <Tooltip title={`Assessment: ${week.assessmentName} | Unit: ${week.unit}`} arrow>
+                                <Box>
+                                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold' }}>
+                                    {week.label}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {week.assessmentName}
+                                  </Typography>
+                                </Box>
+                              </Tooltip>
+                            </TableCell>
+                          ))}
+                          <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Annual Avg</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {weeklyReportData.map((student, index) => (
+                          <TableRow key={index} hover>
+                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>{student.rowNumber}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1 }}>{student.studentName}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 220, bgcolor: 'background.paper', zIndex: 1 }}>
+                              <Chip label={student.year} size="small" />
+                            </TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1 }}>{student.unit}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1 }}>{student.groupName}</TableCell>
+                            {/* Dynamic week score columns */}
+                            {sortedWeeks.map((week, idx) => {
+                              const weekScore = student.weeklyScores[week.weekNumber];
+                              if (weekScore) {
+                                const percentage = weekScore.percentage;
+                                const bgColor = percentage >= 85 ? '#e8f5e9' : percentage >= 60 ? '#fff9c4' : '#ffebee';
+                                return (
+                                  <TableCell
+                                    key={idx}
+                                    align="center"
+                                    sx={{
+                                      bgcolor: bgColor,
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    <Tooltip title={`${weekScore.assessmentCount} assessment(s)`} arrow>
+                                      <span>{percentage}%</span>
+                                    </Tooltip>
+                                  </TableCell>
+                                );
+                              } else {
+                                return (
+                                  <TableCell key={idx} align="center" sx={{ color: 'text.disabled' }}>
+                                    -
+                                  </TableCell>
+                                );
+                              }
+                            })}
+                            <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
+                              <Chip
+                                label={`${student.annualAverage}%`}
+                                color={student.annualAverage >= 85 ? 'success' : student.annualAverage >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
                             </TableCell>
