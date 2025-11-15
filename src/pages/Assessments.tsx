@@ -268,6 +268,7 @@ const Assessments: React.FC = () => {
   }
 
   return (
+    <>
       <Box>
         <Typography variant="h4" gutterBottom>
           Saved Assessments
@@ -701,6 +702,7 @@ const Assessments: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+    </>
   );
 };
 
