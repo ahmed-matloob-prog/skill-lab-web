@@ -1553,6 +1553,242 @@ export const importStudentsByGroupsFromExcel = (file: File): Promise<{
   });
 };
 
+// Grand Report Detailed Export with Individual Assessment Columns
+export const exportGrandReportDetailedToExcel = (
+  detailedReportData: any[],
+  uniqueAssessments: any[],
+  students: Student[],
+  groups: Group[],
+  selectedYear: number | 'all'
+): void => {
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const workbook = XLSX.utils.book_new();
+
+  // ============= SHEET 1: Detailed Assessment Scores =============
+  const detailedData: any[] = [];
+
+  // Add header row with export info
+  detailedData.push({
+    '#': 'Grand Report - Detailed View',
+    'Student Name': selectedYear === 'all' ? 'All Years' : `Year ${selectedYear}`,
+    'Year': `Export Date: ${exportDate}`,
+    'Unit': '',
+    'Group': '',
+    ...Object.fromEntries(uniqueAssessments.map(() => ['', ''])),
+    'Average %': '',
+    'Attendance %': '',
+  });
+
+  detailedData.push({
+    '#': '',
+    'Student Name': '',
+    'Year': '',
+    'Unit': '',
+    'Group': '',
+    ...Object.fromEntries(uniqueAssessments.map(() => ['', ''])),
+    'Average %': '',
+    'Attendance %': '',
+  });
+
+  // Build data rows
+  detailedReportData.forEach((student, index) => {
+    const rowData: any = {
+      '#': index + 1,
+      'Student Name': student.studentName,
+      'Year': student.year,
+      'Unit': student.unit || '-',
+      'Group': student.groupName,
+    };
+
+    // Add each assessment score
+    uniqueAssessments.forEach((assessment) => {
+      const scoreData = student.assessmentScores[assessment.key];
+      const columnName = `${assessment.name} (${assessment.maxScore})`;
+
+      if (scoreData) {
+        rowData[columnName] = scoreData.score;
+      } else {
+        rowData[columnName] = '-';
+      }
+    });
+
+    rowData['Average %'] = student.averageScore;
+    rowData['Attendance %'] = student.attendancePercentage;
+
+    detailedData.push(rowData);
+  });
+
+  // Add summary row
+  detailedData.push({
+    '#': '',
+    'Student Name': '',
+    'Year': '',
+    'Unit': '',
+    'Group': '',
+    ...Object.fromEntries(uniqueAssessments.map(() => ['', ''])),
+    'Average %': '',
+    'Attendance %': '',
+  });
+
+  // Calculate class averages for each assessment
+  const summaryRow: any = {
+    '#': '',
+    'Student Name': 'CLASS AVERAGE',
+    'Year': '',
+    'Unit': '',
+    'Group': '',
+  };
+
+  uniqueAssessments.forEach((assessment) => {
+    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    const scores: number[] = [];
+
+    detailedReportData.forEach((student) => {
+      const scoreData = student.assessmentScores[assessment.key];
+      if (scoreData) {
+        const percentage = Math.round((scoreData.score / scoreData.maxScore) * 100);
+        scores.push(percentage);
+      }
+    });
+
+    if (scores.length > 0) {
+      const avgPercentage = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
+      summaryRow[columnName] = `${avgPercentage}%`;
+    } else {
+      summaryRow[columnName] = '-';
+    }
+  });
+
+  // Calculate overall averages
+  const allAverageScores = detailedReportData.map(s => s.averageScore).filter(s => s > 0);
+  const classAvgScore = allAverageScores.length > 0
+    ? Math.round(allAverageScores.reduce((sum, s) => sum + s, 0) / allAverageScores.length)
+    : 0;
+
+  const allAttendanceScores = detailedReportData.map(s => s.attendancePercentage).filter(s => s > 0);
+  const classAvgAttendance = allAttendanceScores.length > 0
+    ? Math.round(allAttendanceScores.reduce((sum, s) => sum + s, 0) / allAttendanceScores.length)
+    : 0;
+
+  summaryRow['Average %'] = `${classAvgScore}%`;
+  summaryRow['Attendance %'] = `${classAvgAttendance}%`;
+
+  detailedData.push(summaryRow);
+
+  const sheet1 = XLSX.utils.json_to_sheet(detailedData);
+
+  // Set column widths
+  const colWidths = [
+    { wch: 5 },  // #
+    { wch: 25 }, // Student Name
+    { wch: 8 },  // Year
+    { wch: 10 }, // Unit
+    { wch: 15 }, // Group
+    ...uniqueAssessments.map(() => ({ wch: 12 })), // Each assessment
+    { wch: 12 }, // Average %
+    { wch: 12 }, // Attendance %
+  ];
+  sheet1['!cols'] = colWidths;
+
+  // Freeze first 5 columns (A-E)
+  sheet1['!freeze'] = { xSplit: 5, ySplit: 0 };
+
+  XLSX.utils.book_append_sheet(workbook, sheet1, 'Detailed Scores');
+
+  // ============= SHEET 2: Summary Statistics =============
+  const statsData: any[] = [];
+
+  statsData.push({
+    'Metric': 'Grand Report Summary Statistics',
+    'Value': `Export Date: ${exportDate}`,
+    'Details': selectedYear === 'all' ? 'All Years' : `Year ${selectedYear}`,
+  });
+
+  statsData.push({
+    'Metric': '',
+    'Value': '',
+    'Details': '',
+  });
+
+  statsData.push({ 'Metric': '=== Overall Statistics ===', 'Value': '', 'Details': '' });
+  statsData.push({ 'Metric': 'Total Students', 'Value': detailedReportData.length, 'Details': 'Enrolled students' });
+  statsData.push({ 'Metric': 'Total Assessments', 'Value': uniqueAssessments.length, 'Details': 'Unique assessments' });
+  statsData.push({ 'Metric': 'Class Average Score', 'Value': `${classAvgScore}%`, 'Details': 'Average across all students' });
+  statsData.push({ 'Metric': 'Class Attendance Rate', 'Value': `${classAvgAttendance}%`, 'Details': 'Average attendance' });
+
+  statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+  statsData.push({ 'Metric': '=== Performance Distribution ===', 'Value': '', 'Details': '' });
+
+  const excellentCount = allAverageScores.filter(s => s >= 85).length;
+  const goodCount = allAverageScores.filter(s => s >= 75 && s < 85).length;
+  const passCount = allAverageScores.filter(s => s >= 60 && s < 75).length;
+  const needImprovementCount = allAverageScores.filter(s => s < 60).length;
+
+  statsData.push({
+    'Metric': 'Excellent (≥85%)',
+    'Value': excellentCount,
+    'Details': allAverageScores.length > 0 ? `${Math.round((excellentCount / allAverageScores.length) * 100)}% of students` : 'N/A'
+  });
+  statsData.push({
+    'Metric': 'Good (75-84%)',
+    'Value': goodCount,
+    'Details': allAverageScores.length > 0 ? `${Math.round((goodCount / allAverageScores.length) * 100)}% of students` : 'N/A'
+  });
+  statsData.push({
+    'Metric': 'Pass (60-74%)',
+    'Value': passCount,
+    'Details': allAverageScores.length > 0 ? `${Math.round((passCount / allAverageScores.length) * 100)}% of students` : 'N/A'
+  });
+  statsData.push({
+    'Metric': 'Need Improvement (<60%)',
+    'Value': needImprovementCount,
+    'Details': allAverageScores.length > 0 ? `${Math.round((needImprovementCount / allAverageScores.length) * 100)}% of students` : 'N/A'
+  });
+
+  statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
+  statsData.push({ 'Metric': '=== Assessment Breakdown ===', 'Value': '', 'Details': '' });
+
+  // Count assessments by type
+  const assessmentTypes = uniqueAssessments.reduce((acc: any, assessment: any) => {
+    acc[assessment.type] = (acc[assessment.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  Object.entries(assessmentTypes).forEach(([type, count]) => {
+    const typeName = type.charAt(0).toUpperCase() + type.slice(1);
+    statsData.push({
+      'Metric': typeName,
+      'Value': count,
+      'Details': `${typeName} assessments`,
+    });
+  });
+
+  const sheet2 = XLSX.utils.json_to_sheet(statsData);
+
+  sheet2['!cols'] = [
+    { wch: 35 }, // Metric
+    { wch: 15 }, // Value
+    { wch: 35 }, // Details
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet2, 'Statistics');
+
+  // Generate Excel file
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const fileName = selectedYear === 'all'
+    ? `Grand_Report_Detailed_AllYears_${new Date().toISOString().split('T')[0]}.xlsx`
+    : `Grand_Report_Detailed_Year${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+  saveAs(data, fileName);
+};
+
 // Generate Excel template for bulk student import by groups
 export const generateStudentGroupImportTemplate = (groups: Group[]): void => {
   // Group by year for better organization

@@ -35,7 +35,7 @@ import {
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
-import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary } from '../utils/excelUtils';
+import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary, exportGrandReportDetailedToExcel } from '../utils/excelUtils';
 import { Student, User } from '../types';
 import AuthService from '../services/authService';
 
@@ -248,8 +248,20 @@ const AdminReport: React.FC = () => {
 
   const handleExportReport = () => {
     try {
-      const year = selectedYear !== 'all' ? selectedYear as number : undefined;
-      exportSimplifiedReportToExcel(assessments, students, groups, year);
+      if (viewMode === 'detailed') {
+        // Export detailed view with all individual assessment columns
+        exportGrandReportDetailedToExcel(
+          detailedReportData,
+          uniqueAssessments,
+          students,
+          groups,
+          selectedYear
+        );
+      } else {
+        // Export summary view (original simplified format)
+        const year = selectedYear !== 'all' ? selectedYear as number : undefined;
+        exportSimplifiedReportToExcel(assessments, students, groups, year);
+      }
     } catch (error) {
       logger.error('Export failed:', error);
     }
