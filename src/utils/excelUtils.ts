@@ -1572,28 +1572,35 @@ export const exportGrandReportDetailedToExcel = (
   // ============= SHEET 1: Detailed Assessment Scores =============
   const detailedData: any[] = [];
 
-  // Add header row with export info
-  detailedData.push({
-    '#': 'Grand Report - Detailed View',
-    'Student Name': selectedYear === 'all' ? 'All Years' : `Year ${selectedYear}`,
-    'Year': `Export Date: ${exportDate}`,
-    'Unit': '',
-    'Group': '',
-    ...Object.fromEntries(uniqueAssessments.map(() => ['', ''])),
-    'Average %': '',
-    'Attendance %': '',
+  // Add header row with export info - build in exact order
+  const headerRow1: any = {};
+  headerRow1['#'] = 'Grand Report - Detailed View';
+  headerRow1['Student Name'] = selectedYear === 'all' ? 'All Years' : `Year ${selectedYear}`;
+  headerRow1['Year'] = `Export Date: ${exportDate}`;
+  headerRow1['Unit'] = '';
+  headerRow1['Group'] = '';
+  uniqueAssessments.forEach((assessment) => {
+    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    headerRow1[columnName] = '';
   });
+  headerRow1['Average %'] = '';
+  headerRow1['Attendance %'] = '';
+  detailedData.push(headerRow1);
 
-  detailedData.push({
-    '#': '',
-    'Student Name': '',
-    'Year': '',
-    'Unit': '',
-    'Group': '',
-    ...Object.fromEntries(uniqueAssessments.map(() => ['', ''])),
-    'Average %': '',
-    'Attendance %': '',
+  // Add empty row - build in exact order
+  const headerRow2: any = {};
+  headerRow2['#'] = '';
+  headerRow2['Student Name'] = '';
+  headerRow2['Year'] = '';
+  headerRow2['Unit'] = '';
+  headerRow2['Group'] = '';
+  uniqueAssessments.forEach((assessment) => {
+    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    headerRow2[columnName] = '';
   });
+  headerRow2['Average %'] = '';
+  headerRow2['Attendance %'] = '';
+  detailedData.push(headerRow2);
 
   // Build data rows - match exact table column order
   detailedReportData.forEach((student, index) => {
@@ -1626,26 +1633,28 @@ export const exportGrandReportDetailedToExcel = (
     detailedData.push(rowData);
   });
 
-  // Add summary row
-  detailedData.push({
-    '#': '',
-    'Student Name': '',
-    'Year': '',
-    'Unit': '',
-    'Group': '',
-    ...Object.fromEntries(uniqueAssessments.map(() => ['', ''])),
-    'Average %': '',
-    'Attendance %': '',
+  // Add summary row - build in exact order
+  const emptyRow: any = {};
+  emptyRow['#'] = '';
+  emptyRow['Student Name'] = '';
+  emptyRow['Year'] = '';
+  emptyRow['Unit'] = '';
+  emptyRow['Group'] = '';
+  uniqueAssessments.forEach((assessment) => {
+    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    emptyRow[columnName] = '';
   });
+  emptyRow['Average %'] = '';
+  emptyRow['Attendance %'] = '';
+  detailedData.push(emptyRow);
 
-  // Calculate class averages for each assessment
-  const summaryRow: any = {
-    '#': '',
-    'Student Name': 'CLASS AVERAGE',
-    'Year': '',
-    'Unit': '',
-    'Group': '',
-  };
+  // Calculate class averages for each assessment - build in exact order
+  const summaryRow: any = {};
+  summaryRow['#'] = '';
+  summaryRow['Student Name'] = 'CLASS AVERAGE';
+  summaryRow['Year'] = '';
+  summaryRow['Unit'] = '';
+  summaryRow['Group'] = '';
 
   uniqueAssessments.forEach((assessment) => {
     const columnName = `${assessment.name} (${assessment.maxScore})`;
