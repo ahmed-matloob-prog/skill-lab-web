@@ -231,10 +231,10 @@ const AdminReport: React.FC = () => {
           studentId: student.studentId,
           year: student.year,
           unit: student.unit || '-',
-          group: getGroupName(student.groupId),
+          groupName: getGroupName(student.groupId),
           assessmentScores: scoresMap,
           averageScore: studentAverageScore,
-          attendanceRate,
+          attendancePercentage: attendanceRate,
         };
       });
 
@@ -718,7 +718,7 @@ const AdminReport: React.FC = () => {
                               <Chip label={student.year} size="small" />
                             </TableCell>
                             <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1 }}>{student.unit}</TableCell>
-                            <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1 }}>{student.group}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1 }}>{student.groupName}</TableCell>
                             {/* Dynamic assessment score columns */}
                             {uniqueAssessments.map((assessment, idx) => {
                               const scoreData = student.assessmentScores[assessment.key];
@@ -753,8 +753,8 @@ const AdminReport: React.FC = () => {
                             </TableCell>
                             <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
                               <Chip
-                                label={`${student.attendanceRate}%`}
-                                color={student.attendanceRate >= 85 ? 'success' : student.attendanceRate >= 60 ? 'warning' : 'error'}
+                                label={`${student.attendancePercentage}%`}
+                                color={student.attendancePercentage >= 85 ? 'success' : student.attendancePercentage >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
                             </TableCell>
