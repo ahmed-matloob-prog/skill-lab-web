@@ -1595,17 +1595,19 @@ export const exportGrandReportDetailedToExcel = (
     'Attendance %': '',
   });
 
-  // Build data rows
+  // Build data rows - match exact table column order
   detailedReportData.forEach((student, index) => {
-    const rowData: any = {
-      '#': index + 1,
-      'Student Name': student.studentName,
-      'Year': student.year,
-      'Unit': student.unit || '-',
-      'Group': student.groupName,
-    };
+    // Create row in exact order: #, Student Name, Year, Unit, Group, [Assessments], Average %, Attendance %
+    const rowData: any = {};
 
-    // Add each assessment score
+    // Fixed columns first (in exact order)
+    rowData['#'] = index + 1;
+    rowData['Student Name'] = student.studentName;
+    rowData['Year'] = student.year;
+    rowData['Unit'] = student.unit || '-';
+    rowData['Group'] = student.groupName;
+
+    // Add each assessment score (dynamic columns in chronological order)
     uniqueAssessments.forEach((assessment) => {
       const scoreData = student.assessmentScores[assessment.key];
       const columnName = `${assessment.name} (${assessment.maxScore})`;
@@ -1617,6 +1619,7 @@ export const exportGrandReportDetailedToExcel = (
       }
     });
 
+    // Final calculated columns
     rowData['Average %'] = student.averageScore;
     rowData['Attendance %'] = student.attendancePercentage;
 

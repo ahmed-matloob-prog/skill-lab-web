@@ -248,20 +248,14 @@ const AdminReport: React.FC = () => {
 
   const handleExportReport = () => {
     try {
-      if (viewMode === 'detailed') {
-        // Export detailed view with all individual assessment columns
-        exportGrandReportDetailedToExcel(
-          detailedReportData,
-          uniqueAssessments,
-          students,
-          groups,
-          selectedYear
-        );
-      } else {
-        // Export summary view (original simplified format)
-        const year = selectedYear !== 'all' ? selectedYear as number : undefined;
-        exportSimplifiedReportToExcel(assessments, students, groups, year);
-      }
+      // Always export detailed view with all individual assessment columns
+      exportGrandReportDetailedToExcel(
+        detailedReportData,
+        uniqueAssessments,
+        students,
+        groups,
+        selectedYear
+      );
     } catch (error) {
       logger.error('Export failed:', error);
     }
