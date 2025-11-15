@@ -29,6 +29,8 @@ import {
   School,
   TrendingUp,
   BarChart,
+  ViewList,
+  TableChart,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,6 +47,9 @@ const AdminReport: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [reportData, setReportData] = useState<any[]>([]);
+  const [detailedReportData, setDetailedReportData] = useState<any[]>([]);
+  const [uniqueAssessments, setUniqueAssessments] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [loadingReport, setLoadingReport] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [summaryStats, setSummaryStats] = useState({
@@ -77,6 +82,22 @@ const AdminReport: React.FC = () => {
     return group ? group.name : 'Unknown Group';
   };
 
+  // Helper function to get score color based on percentage
+  const getScoreColor = (score: number, maxScore: number): 'success' | 'warning' | 'error' | 'default' => {
+    const percentage = (score / maxScore) * 100;
+    if (percentage >= 85) return 'success';  // Green
+    if (percentage >= 60) return 'warning';  // Yellow
+    return 'error';  // Red
+  };
+
+  // Helper function to get background color for score cells
+  const getScoreBgColor = (score: number, maxScore: number): string => {
+    const percentage = (score / maxScore) * 100;
+    if (percentage >= 85) return '#e8f5e9';  // Light green
+    if (percentage >= 60) return '#fff9c4';  // Light yellow
+    return '#ffebee';  // Light red
+  };
+
   const generateGrandReport = () => {
     setLoadingReport(true);
 
@@ -87,10 +108,10 @@ const AdminReport: React.FC = () => {
       const filteredAssessments = selectedYear !== 'all' ?
         assessments.filter(a => a.year === selectedYear && a.exportedToAdmin === true) :
         assessments.filter(a => a.exportedToAdmin === true);
-      
-      const groupFilteredAttendance = selectedGroup !== 'all' ? 
+
+      const groupFilteredAttendance = selectedGroup !== 'all' ?
         filteredAttendance.filter(a => a.groupId === selectedGroup) : filteredAttendance;
-      const groupFilteredAssessments = selectedGroup !== 'all' ? 
+      const groupFilteredAssessments = selectedGroup !== 'all' ?
         filteredAssessments.filter(a => a.groupId === selectedGroup) : filteredAssessments;
 
       // Calculate summary statistics
@@ -100,16 +121,16 @@ const AdminReport: React.FC = () => {
       const totalAssessments = groupFilteredAssessments.length;
 
       // Calculate average attendance rate
-      const presentCount = groupFilteredAttendance.filter(a => 
+      const presentCount = groupFilteredAttendance.filter(a =>
         a.status === 'present' || a.status === 'late'
       ).length;
-      const averageAttendanceRate = totalAttendance > 0 ? 
+      const averageAttendanceRate = totalAttendance > 0 ?
         Math.round((presentCount / totalAttendance) * 100) : 0;
 
       // Calculate average score
       const totalScore = groupFilteredAssessments.reduce((sum, a) => sum + a.score, 0);
       const totalMaxScore = groupFilteredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
-      const averageScore = totalMaxScore > 0 ? 
+      const averageScore = totalMaxScore > 0 ?
         Math.round((totalScore / totalMaxScore) * 100) : 0;
 
       setSummaryStats({
@@ -121,22 +142,44 @@ const AdminReport: React.FC = () => {
         averageScore,
       });
 
-      // Generate detailed report data
+      // Collect unique assessments (for detailed view)
+      const assessmentMap = new Map();
+      groupFilteredAssessments.forEach(assessment => {
+        const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+        if (!assessmentMap.has(key)) {
+          assessmentMap.set(key, {
+            name: assessment.assessmentName,
+            type: assessment.assessmentType,
+            maxScore: assessment.maxScore,
+            date: assessment.date,
+            key: key,
+          });
+        }
+      });
+
+      // Sort assessments by date
+      const sortedAssessments = Array.from(assessmentMap.values()).sort((a, b) => {
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      });
+
+      setUniqueAssessments(sortedAssessments);
+
+      // Generate summary report data
       const reportData = filteredStudents.map(student => {
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
-        
+
         // Calculate student-specific stats
         const attendanceCount = studentAttendance.length;
-        const presentCount = studentAttendance.filter(a => 
+        const presentCount = studentAttendance.filter(a =>
           a.status === 'present' || a.status === 'late'
         ).length;
-        const attendanceRate = attendanceCount > 0 ? 
+        const attendanceRate = attendanceCount > 0 ?
           Math.round((presentCount / attendanceCount) * 100) : 0;
 
         const totalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
         const totalMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
-        const studentAverageScore = totalMaxScore > 0 ? 
+        const studentAverageScore = totalMaxScore > 0 ?
           Math.round((totalScore / totalMaxScore) * 100) : 0;
 
         return {
@@ -153,6 +196,49 @@ const AdminReport: React.FC = () => {
       });
 
       setReportData(reportData);
+
+      // Generate detailed report data with individual assessment scores
+      const detailedData = filteredStudents.map((student, index) => {
+        const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
+        const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
+
+        // Calculate student-specific stats
+        const attendanceCount = studentAttendance.length;
+        const presentCount = studentAttendance.filter(a =>
+          a.status === 'present' || a.status === 'late'
+        ).length;
+        const attendanceRate = attendanceCount > 0 ?
+          Math.round((presentCount / attendanceCount) * 100) : 0;
+
+        const totalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
+        const totalMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+        const studentAverageScore = totalMaxScore > 0 ?
+          Math.round((totalScore / totalMaxScore) * 100) : 0;
+
+        // Create a map of assessment scores for this student
+        const scoresMap: { [key: string]: { score: number; maxScore: number } } = {};
+        studentAssessments.forEach(assessment => {
+          const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+          scoresMap[key] = {
+            score: assessment.score,
+            maxScore: assessment.maxScore,
+          };
+        });
+
+        return {
+          rowNumber: index + 1,
+          studentName: student.name,
+          studentId: student.studentId,
+          year: student.year,
+          unit: student.unit || '-',
+          group: getGroupName(student.groupId),
+          assessmentScores: scoresMap,
+          averageScore: studentAverageScore,
+          attendanceRate,
+        };
+      });
+
+      setDetailedReportData(detailedData);
     } catch (error) {
       logger.error('Error generating report:', error);
     } finally {
@@ -526,54 +612,145 @@ const AdminReport: React.FC = () => {
           ) : (
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Detailed Student Report ({reportData.length} students)
-                </Typography>
-                <TableContainer component={Paper}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Student Name</TableCell>
-                        <TableCell>Student ID</TableCell>
-                        <TableCell>Year</TableCell>
-                        <TableCell>Unit</TableCell>
-                        <TableCell>Group</TableCell>
-                        <TableCell align="center">Attendance Rate</TableCell>
-                        <TableCell align="center">Average Score</TableCell>
-                        <TableCell align="center">Total Assessments</TableCell>
-                        <TableCell align="center">Total Attendance</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {reportData.map((student, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{student.studentName}</TableCell>
-                          <TableCell>{student.studentId}</TableCell>
-                          <TableCell>
-                            <Chip label={`Year ${student.year}`} size="small" />
-                          </TableCell>
-                          <TableCell>{student.unit || '-'}</TableCell>
-                          <TableCell>{student.group}</TableCell>
-                          <TableCell align="center">
-                            <Chip
-                              label={`${student.attendanceRate}%`}
-                              color={student.attendanceRate >= 80 ? 'success' : student.attendanceRate >= 60 ? 'warning' : 'error'}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell align="center">
-                            <Chip
-                              label={`${student.averageScore}%`}
-                              color={student.averageScore >= 80 ? 'success' : student.averageScore >= 70 ? 'primary' : student.averageScore >= 60 ? 'warning' : 'error'}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell align="center">{student.totalAssessments}</TableCell>
-                          <TableCell align="center">{student.totalAttendance}</TableCell>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">
+                    Detailed Student Report ({reportData.length} students)
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={viewMode === 'summary' ? <TableChart /> : <ViewList />}
+                    onClick={() => setViewMode(viewMode === 'summary' ? 'detailed' : 'summary')}
+                  >
+                    {viewMode === 'summary' ? 'Show Detailed Scores' : 'Show Summary'}
+                  </Button>
+                </Box>
+                <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
+                  {viewMode === 'summary' ? (
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Student Name</TableCell>
+                          <TableCell>Student ID</TableCell>
+                          <TableCell>Year</TableCell>
+                          <TableCell>Unit</TableCell>
+                          <TableCell>Group</TableCell>
+                          <TableCell align="center">Attendance Rate</TableCell>
+                          <TableCell align="center">Average Score</TableCell>
+                          <TableCell align="center">Total Assessments</TableCell>
+                          <TableCell align="center">Total Attendance</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHead>
+                      <TableBody>
+                        {reportData.map((student, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{student.studentName}</TableCell>
+                            <TableCell>{student.studentId}</TableCell>
+                            <TableCell>
+                              <Chip label={`Year ${student.year}`} size="small" />
+                            </TableCell>
+                            <TableCell>{student.unit || '-'}</TableCell>
+                            <TableCell>{student.group}</TableCell>
+                            <TableCell align="center">
+                              <Chip
+                                label={`${student.attendanceRate}%`}
+                                color={student.attendanceRate >= 80 ? 'success' : student.attendanceRate >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell align="center">
+                              <Chip
+                                label={`${student.averageScore}%`}
+                                color={student.averageScore >= 80 ? 'success' : student.averageScore >= 70 ? 'primary' : student.averageScore >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell align="center">{student.totalAssessments}</TableCell>
+                            <TableCell align="center">{student.totalAttendance}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <Table size="small" sx={{ minWidth: 1200 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>#</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Student Name</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 220, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Year</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Unit</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Group</TableCell>
+                          {/* Dynamic assessment columns */}
+                          {uniqueAssessments.map((assessment, idx) => (
+                            <TableCell key={idx} align="center" sx={{ fontWeight: 'bold', minWidth: 100 }}>
+                              <Box>
+                                <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold' }}>
+                                  {assessment.name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  ({assessment.maxScore})
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                          ))}
+                          <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Average %</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Attendance %</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {detailedReportData.map((student, index) => (
+                          <TableRow key={index} hover>
+                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>{student.rowNumber}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1 }}>{student.studentName}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 220, bgcolor: 'background.paper', zIndex: 1 }}>
+                              <Chip label={student.year} size="small" />
+                            </TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1 }}>{student.unit}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1 }}>{student.group}</TableCell>
+                            {/* Dynamic assessment score columns */}
+                            {uniqueAssessments.map((assessment, idx) => {
+                              const scoreData = student.assessmentScores[assessment.key];
+                              if (scoreData) {
+                                const percentage = (scoreData.score / scoreData.maxScore) * 100;
+                                return (
+                                  <TableCell
+                                    key={idx}
+                                    align="center"
+                                    sx={{
+                                      bgcolor: getScoreBgColor(scoreData.score, scoreData.maxScore),
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {scoreData.score}
+                                  </TableCell>
+                                );
+                              } else {
+                                return (
+                                  <TableCell key={idx} align="center" sx={{ color: 'text.disabled' }}>
+                                    -
+                                  </TableCell>
+                                );
+                              }
+                            })}
+                            <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
+                              <Chip
+                                label={`${student.averageScore}%`}
+                                color={student.averageScore >= 85 ? 'success' : student.averageScore >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
+                              <Chip
+                                label={`${student.attendanceRate}%`}
+                                color={student.attendanceRate >= 85 ? 'success' : student.attendanceRate >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
                 </TableContainer>
               </CardContent>
             </Card>
