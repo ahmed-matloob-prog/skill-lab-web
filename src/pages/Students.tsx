@@ -548,23 +548,28 @@ const Students: React.FC = () => {
           >
             Download Template
           </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<Upload />}
-            onClick={handleOpenGroupImportDialog}
-            sx={{ mr: 1 }}
-          >
-            Import by Groups
-          </Button>
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={handleDownloadGroupTemplate}
-            sx={{ mr: 1 }}
-          >
-            Group Template
-          </Button>
+          {/* Admin-only: Import by Groups and Group Template */}
+          {user?.role === 'admin' && (
+            <>
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<Upload />}
+                onClick={handleOpenGroupImportDialog}
+                sx={{ mr: 1 }}
+              >
+                Import by Groups
+              </Button>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={handleDownloadGroupTemplate}
+                sx={{ mr: 1 }}
+              >
+                Group Template
+              </Button>
+            </>
+          )}
           <Button
             variant="outlined"
             onClick={() => forceRefresh()}
