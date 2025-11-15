@@ -20,7 +20,6 @@ const Assessments = lazy(() => import('./pages/Assessments'));
 const TrainerReports = lazy(() => import('./pages/TrainerReports'));
 const AdminReport = lazy(() => import('./pages/AdminReport'));
 const Admin = lazy(() => import('./pages/Admin'));
-const Sync = lazy(() => import('./pages/Sync'));
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -134,7 +133,6 @@ const AppContent: React.FC = () => {
                       <Route path="/input" element={<CombinedInput />} />
                       <Route path="/assessments" element={<Assessments />} />
                       <Route path="/reports" element={<TrainerReports />} />
-                      <Route path="/sync" element={<Sync />} />
                       <Route
                         path="/admin"
                         element={
