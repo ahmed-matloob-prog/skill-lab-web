@@ -25,6 +25,9 @@ import {
   TableRow,
   Paper,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   Send,
@@ -32,6 +35,7 @@ import {
   Edit,
   Delete,
   Warning,
+  ExpandMore,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -349,10 +353,21 @@ const Assessments: React.FC = () => {
                       const exportedCount = group.assessments.filter((a: AssessmentRecord) => a.exportedToAdmin === true).length;
 
                       return (
-                        <Card key={key} sx={{ mb: 2, border: '1px solid #e0e0e0' }}>
-                          <CardContent>
+                        <Accordion key={key} sx={{ mb: 2, border: '1px solid #e0e0e0' }}>
+                          <AccordionSummary
+                            expandIcon={<ExpandMore />}
+                            sx={{
+                              '&:hover': { bgcolor: 'action.hover' },
+                              '& .MuiAccordionSummary-content': {
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                my: 1
+                              }
+                            }}
+                          >
                             {/* Header */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', mr: 2 }}>
                               <Box>
                                 <Typography variant="h6">
                                   {group.name}
@@ -383,7 +398,10 @@ const Assessments: React.FC = () => {
                               </Box>
 
                               {/* Status & Actions */}
-                              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                              <Box
+                                sx={{ display: 'flex', gap: 1, alignItems: 'center' }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {group.allExported ? (
                                   <>
                                     <Chip
@@ -399,7 +417,10 @@ const Assessments: React.FC = () => {
                                         color="error"
                                         size="small"
                                         startIcon={<Delete />}
-                                        onClick={() => handleBulkDeleteClick(group.assessments)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleBulkDeleteClick(group.assessments);
+                                        }}
                                       >
                                         Delete All
                                       </Button>
@@ -431,7 +452,10 @@ const Assessments: React.FC = () => {
                                           color="primary"
                                           size="small"
                                           startIcon={<Send />}
-                                          onClick={() => handleExportClick(group.assessments)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleExportClick(group.assessments);
+                                          }}
                                         >
                                           Export to Admin
                                         </Button>
@@ -440,7 +464,10 @@ const Assessments: React.FC = () => {
                                           color="error"
                                           size="small"
                                           startIcon={<Delete />}
-                                          onClick={() => handleBulkDeleteClick(group.assessments)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleBulkDeleteClick(group.assessments);
+                                          }}
                                         >
                                           Delete All
                                         </Button>
@@ -453,7 +480,10 @@ const Assessments: React.FC = () => {
                                         color="error"
                                         size="small"
                                         startIcon={<Delete />}
-                                        onClick={() => handleBulkDeleteClick(group.assessments)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleBulkDeleteClick(group.assessments);
+                                        }}
                                       >
                                         Delete All
                                       </Button>
@@ -462,7 +492,9 @@ const Assessments: React.FC = () => {
                                 )}
                               </Box>
                             </Box>
+                          </AccordionSummary>
 
+                          <AccordionDetails>
                             {/* Student Scores Table */}
                             <TableContainer>
                               <Table size="small">
@@ -538,8 +570,8 @@ const Assessments: React.FC = () => {
                                 </TableBody>
                               </Table>
                             </TableContainer>
-                          </CardContent>
-                        </Card>
+                          </AccordionDetails>
+                        </Accordion>
                       );
                     });
                   })()}
