@@ -35,20 +35,36 @@ const Dashboard: React.FC = () => {
     if (!loading) {
       calculateStats();
     }
-  }, [students, groups, attendance, assessments, loading]);
+  }, [students, groups, attendance, assessments, loading, user]);
 
   const calculateStats = () => {
-    const totalStudents = students.length;
-    const totalGroups = groups.length;
-    const totalAttendance = attendance.length;
-    const totalAssessments = assessments.length;
+    // Filter data based on user role
+    let filteredStudents = students;
+    let filteredGroups = groups;
+    let filteredAttendance = attendance;
+    let filteredAssessments = assessments;
+
+    // For trainers, only show their assigned groups' data
+    if (user?.role === 'trainer') {
+      const assignedGroupIds = user?.assignedGroups || [];
+
+      filteredStudents = students.filter(s => assignedGroupIds.includes(s.groupId));
+      filteredGroups = groups.filter(g => assignedGroupIds.includes(g.id));
+      filteredAttendance = attendance.filter(a => assignedGroupIds.includes(a.groupId));
+      filteredAssessments = assessments.filter(a => assignedGroupIds.includes(a.groupId));
+    }
+
+    const totalStudents = filteredStudents.length;
+    const totalGroups = filteredGroups.length;
+    const totalAttendance = filteredAttendance.length;
+    const totalAssessments = filteredAssessments.length;
 
     // Calculate attendance rate
-    const presentCount = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+    const presentCount = filteredAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
     const attendanceRate = totalAttendance > 0 ? (presentCount / totalAttendance) * 100 : 0;
 
     // Calculate average score
-    const totalScore = assessments.reduce((sum, a) => sum + a.score, 0);
+    const totalScore = filteredAssessments.reduce((sum, a) => sum + a.score, 0);
     const averageScore = totalAssessments > 0 ? totalScore / totalAssessments : 0;
 
     setStats({
