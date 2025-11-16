@@ -1583,8 +1583,8 @@ export const exportGrandReportDetailedToExcel = (
     const columnName = `${assessment.name} (${assessment.maxScore})`;
     headerRow1[columnName] = '';
   });
-  headerRow1['Average %'] = '';
-  headerRow1['Attendance %'] = '';
+  headerRow1['Average'] = '';
+  headerRow1['Attendance'] = '';
   detailedData.push(headerRow1);
 
   // Add empty row - build in exact order
@@ -1598,8 +1598,8 @@ export const exportGrandReportDetailedToExcel = (
     const columnName = `${assessment.name} (${assessment.maxScore})`;
     headerRow2[columnName] = '';
   });
-  headerRow2['Average %'] = '';
-  headerRow2['Attendance %'] = '';
+  headerRow2['Average'] = '';
+  headerRow2['Attendance'] = '';
   detailedData.push(headerRow2);
 
   // Build data rows - match exact table column order
@@ -1620,15 +1620,15 @@ export const exportGrandReportDetailedToExcel = (
       const columnName = `${assessment.name} (${assessment.maxScore})`;
 
       if (scoreData) {
-        rowData[columnName] = scoreData.score;
+        rowData[columnName] = `${scoreData.score}/${scoreData.maxScore}`;
       } else {
         rowData[columnName] = '-';
       }
     });
 
     // Final calculated columns
-    rowData['Average %'] = student.averageScore;
-    rowData['Attendance %'] = student.attendancePercentage;
+    rowData['Average'] = student.averageScore;
+    rowData['Attendance'] = student.attendancePercentage;
 
     detailedData.push(rowData);
   });
@@ -1644,8 +1644,8 @@ export const exportGrandReportDetailedToExcel = (
     const columnName = `${assessment.name} (${assessment.maxScore})`;
     emptyRow[columnName] = '';
   });
-  emptyRow['Average %'] = '';
-  emptyRow['Attendance %'] = '';
+  emptyRow['Average'] = '';
+  emptyRow['Attendance'] = '';
   detailedData.push(emptyRow);
 
   // Calculate class averages for each assessment - build in exact order
@@ -1670,7 +1670,7 @@ export const exportGrandReportDetailedToExcel = (
 
     if (scores.length > 0) {
       const avgPercentage = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
-      summaryRow[columnName] = `${avgPercentage}%`;
+      summaryRow[columnName] = avgPercentage;
     } else {
       summaryRow[columnName] = '-';
     }
@@ -1687,8 +1687,8 @@ export const exportGrandReportDetailedToExcel = (
     ? Math.round(allAttendanceScores.reduce((sum, s) => sum + s, 0) / allAttendanceScores.length)
     : 0;
 
-  summaryRow['Average %'] = `${classAvgScore}%`;
-  summaryRow['Attendance %'] = `${classAvgAttendance}%`;
+  summaryRow['Average'] = classAvgScore;
+  summaryRow['Attendance'] = classAvgAttendance;
 
   detailedData.push(summaryRow);
 
@@ -1977,13 +1977,13 @@ export const exportGrandReportWeeklyToExcel = (
       const weekScore = student.weeklyScores.get(week.weekNumber);
 
       if (weekScore) {
-        rowData[weekLabel] = `${weekScore.percentage}%`;
+        rowData[weekLabel] = weekScore.percentage;
       } else {
         rowData[weekLabel] = '-';
       }
     });
 
-    rowData['Annual Average'] = `${student.annualAverage}%`;
+    rowData['Annual Average'] = student.annualAverage;
     weeklyData.push(rowData);
   });
 
@@ -2024,7 +2024,7 @@ export const exportGrandReportWeeklyToExcel = (
 
     if (weekScores.length > 0) {
       const avgPercentage = Math.round(weekScores.reduce((sum, s) => sum + s, 0) / weekScores.length);
-      summaryRow[weekLabel] = `${avgPercentage}%`;
+      summaryRow[weekLabel] = avgPercentage;
     } else {
       summaryRow[weekLabel] = '-';
     }
@@ -2035,7 +2035,7 @@ export const exportGrandReportWeeklyToExcel = (
     ? Math.round(allAnnualAverages.reduce((sum, a) => sum + a, 0) / allAnnualAverages.length)
     : 0;
 
-  summaryRow['Annual Average'] = `${classAnnualAverage}%`;
+  summaryRow['Annual Average'] = classAnnualAverage;
   weeklyData.push(summaryRow);
 
   const sheet1 = XLSX.utils.json_to_sheet(weeklyData);
