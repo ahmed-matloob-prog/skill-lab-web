@@ -1622,7 +1622,7 @@ export const exportGrandReportDetailedToExcel = (
       const columnName = `${assessment.name} (${assessment.maxScore})`;
 
       if (scoreData) {
-        rowData[columnName] = `${scoreData.score}/${scoreData.maxScore}`;
+        rowData[columnName] = scoreData.score;
       } else {
         rowData[columnName] = '-';
       }
