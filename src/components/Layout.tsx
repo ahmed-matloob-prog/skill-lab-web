@@ -129,8 +129,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Add admin-only menu items
   if (user?.role === USER_ROLES.ADMIN) {
     menuItems.push(
-      { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' },
-      { text: 'Admin Reports', icon: <BarChart />, path: '/admin-reports' }
+      { text: 'Admin Panel', icon: <AdminPanelSettings />, path: '/admin' }
     );
   }
 
