@@ -1616,7 +1616,9 @@ export const exportGrandReportDetailedToExcel = (
 
     // Add each assessment score (dynamic columns in chronological order)
     uniqueAssessments.forEach((assessment) => {
-      const scoreData = student.assessmentScores[assessment.key];
+      // Construct the key from assessment properties (must match how it's stored in assessmentScores)
+      const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
+      const scoreData = student.assessmentScores[key];
       const columnName = `${assessment.name} (${assessment.maxScore})`;
 
       if (scoreData) {
@@ -1657,11 +1659,13 @@ export const exportGrandReportDetailedToExcel = (
   summaryRow['Group'] = '';
 
   uniqueAssessments.forEach((assessment) => {
+    // Construct the key from assessment properties (must match how it's stored in assessmentScores)
+    const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
     const columnName = `${assessment.name} (${assessment.maxScore})`;
     const scores: number[] = [];
 
     detailedReportData.forEach((student) => {
-      const scoreData = student.assessmentScores[assessment.key];
+      const scoreData = student.assessmentScores[key];
       if (scoreData) {
         const percentage = Math.round((scoreData.score / scoreData.maxScore) * 100);
         scores.push(percentage);
