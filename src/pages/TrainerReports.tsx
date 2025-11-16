@@ -528,7 +528,7 @@ const TrainerReports: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <TrendingUp sx={{ color: 'info.main', mr: 2 }} />
                     <Box>
-                      <Typography variant="h4">{summaryStats.averageAttendanceRate}%</Typography>
+                      <Typography variant="h4">{summaryStats.averageAttendanceRate}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         Avg Attendance Rate
                       </Typography>
@@ -543,7 +543,7 @@ const TrainerReports: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <TrendingUp sx={{ color: 'secondary.main', mr: 2 }} />
                     <Box>
-                      <Typography variant="h4">{summaryStats.averageScore}%</Typography>
+                      <Typography variant="h4">{summaryStats.averageScore}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         Average Score
                       </Typography>
@@ -629,14 +629,14 @@ const TrainerReports: React.FC = () => {
                             <TableCell align="center">{row.year}</TableCell>
                             <TableCell align="center">
                               <Chip
-                                label={`${row.attendanceRate}%`}
+                                label={row.attendanceRate}
                                 color={row.attendanceRate >= 80 ? 'success' : row.attendanceRate >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
                             </TableCell>
                             <TableCell align="center">
                               <Chip
-                                label={`${row.averageScore}%`}
+                                label={row.averageScore}
                                 color={row.averageScore >= 80 ? 'success' : row.averageScore >= 70 ? 'primary' : row.averageScore >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
@@ -686,7 +686,7 @@ const TrainerReports: React.FC = () => {
                             <TableCell align="center">{row.year}</TableCell>
                             <TableCell align="center">
                               <Chip
-                                label={`${row.attendanceRate}%`}
+                                label={row.attendanceRate}
                                 color={row.attendanceRate >= 80 ? 'success' : row.attendanceRate >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
@@ -712,7 +712,7 @@ const TrainerReports: React.FC = () => {
                             })}
                             <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
                               <Chip
-                                label={`${row.averageScore}%`}
+                                label={row.averageScore}
                                 color={row.averageScore >= 80 ? 'success' : row.averageScore >= 70 ? 'primary' : row.averageScore >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
@@ -758,7 +758,7 @@ const TrainerReports: React.FC = () => {
                             <TableCell align="center">{row.year}</TableCell>
                             <TableCell align="center">
                               <Chip
-                                label={`${row.attendanceRate}%`}
+                                label={row.attendanceRate}
                                 color={row.attendanceRate >= 80 ? 'success' : row.attendanceRate >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
@@ -769,7 +769,7 @@ const TrainerReports: React.FC = () => {
                                 <TableCell key={week.weekNumber} align="center">
                                   {weekScore ? (
                                     <Chip
-                                      label={`${weekScore.percentage}%`}
+                                      label={weekScore.percentage}
                                       color={
                                         weekScore.percentage >= 80 ? 'success' :
                                         weekScore.percentage >= 70 ? 'primary' :
@@ -783,7 +783,7 @@ const TrainerReports: React.FC = () => {
                             })}
                             <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
                               <Chip
-                                label={`${row.annualAverage}%`}
+                                label={row.annualAverage}
                                 color={row.annualAverage >= 80 ? 'success' : row.annualAverage >= 70 ? 'primary' : row.annualAverage >= 60 ? 'warning' : 'error'}
                                 size="small"
                               />
