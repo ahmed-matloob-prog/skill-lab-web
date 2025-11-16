@@ -323,15 +323,25 @@ const TrainerReports: React.FC = () => {
 
   const handleExportGrandReport = () => {
     try {
-      if (viewMode === 'weekly') {
-        // Filter assessments by trainer
-        const filteredAssessments = selectedTrainer !== 'all' ?
-          assessments.filter(a => a.trainerId === selectedTrainer && a.exportedToAdmin === true) :
-          assessments.filter(a => a.exportedToAdmin === true);
+      // Get students that have assessments from selected trainer
+      const trainerFilteredAttendance = selectedTrainer !== 'all' ?
+        attendance.filter(a => a.trainerId === selectedTrainer) : attendance;
+      const trainerFilteredAssessments = selectedTrainer !== 'all' ?
+        assessments.filter(a => a.trainerId === selectedTrainer && a.exportedToAdmin === true) :
+        assessments.filter(a => a.exportedToAdmin === true);
 
+      const studentIds = Array.from(new Set([
+        ...trainerFilteredAttendance.map(a => a.studentId),
+        ...trainerFilteredAssessments.map(a => a.studentId)
+      ]));
+      const filteredStudents = students.filter(s => studentIds.includes(s.id));
+
+      if (viewMode === 'weekly') {
+        // Pass ALL assessments but only filtered students
+        // The export function will match assessments to these students
         exportGrandReportWeeklyToExcel(
-          filteredAssessments,
-          students,
+          assessments, // Pass all assessments, export function will filter by student
+          filteredStudents, // Only students with trainer's data
           groups,
           selectedYear !== 'all' ? selectedYear as number : 'all',
           'all' // selectedGroup - using 'all' since we filter by trainer instead
@@ -341,7 +351,7 @@ const TrainerReports: React.FC = () => {
         exportGrandReportDetailedToExcel(
           detailedReportData,
           uniqueAssessments,
-          students,
+          filteredStudents, // Only students with trainer's data
           groups,
           selectedYear !== 'all' ? selectedYear as number : 'all'
         );
