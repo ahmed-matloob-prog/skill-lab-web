@@ -333,7 +333,8 @@ const TrainerReports: React.FC = () => {
           filteredAssessments,
           students,
           groups,
-          selectedYear !== 'all' ? selectedYear as number : undefined
+          selectedYear !== 'all' ? selectedYear as number : 'all',
+          'all' // selectedGroup - using 'all' since we filter by trainer instead
         );
       } else {
         // Use detailed report data
@@ -342,7 +343,7 @@ const TrainerReports: React.FC = () => {
           uniqueAssessments,
           students,
           groups,
-          selectedYear !== 'all' ? selectedYear as number : undefined
+          selectedYear !== 'all' ? selectedYear as number : 'all'
         );
       }
     } catch (error) {
