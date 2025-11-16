@@ -21,8 +21,9 @@ import {
   Paper,
   Chip,
   Divider,
-  Tabs,
-  Tab,
+  ToggleButtonGroup,
+  ToggleButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Download,
@@ -30,39 +31,17 @@ import {
   People,
   School,
   Person,
+  TrendingUp,
+  ViewList,
+  TableChart,
+  CalendarToday,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
-import { exportCombinedReportToExcel } from '../utils/excelUtils';
+import { exportGrandReportDetailedToExcel, exportGrandReportWeeklyToExcel } from '../utils/excelUtils';
 import { Student, User } from '../types';
 import AuthService from '../services/authService';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`trainer-tabpanel-${index}`}
-      aria-labelledby={`trainer-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
 
 const TrainerReports: React.FC = () => {
   const { students, groups, attendance, assessments, loading } = useDatabase();
@@ -70,10 +49,24 @@ const TrainerReports: React.FC = () => {
 
   const [selectedTrainer, setSelectedTrainer] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
-  const [tabValue, setTabValue] = useState(0);
-  const [trainerStats, setTrainerStats] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+
+  // Grand Report states
+  const [viewMode, setViewMode] = useState<'summary' | 'detailed' | 'weekly'>('summary');
+  const [reportData, setReportData] = useState<any[]>([]);
+  const [detailedReportData, setDetailedReportData] = useState<any[]>([]);
+  const [uniqueAssessments, setUniqueAssessments] = useState<any[]>([]);
+  const [weeklyReportData, setWeeklyReportData] = useState<any[]>([]);
+  const [sortedWeeks, setSortedWeeks] = useState<any[]>([]);
+  const [summaryStats, setSummaryStats] = useState({
+    totalStudents: 0,
+    totalGroups: 0,
+    totalAttendance: 0,
+    totalAssessments: 0,
+    averageAttendanceRate: 0,
+    averageScore: 0,
+  });
 
   // Load users on mount
   useEffect(() => {
@@ -106,88 +99,252 @@ const TrainerReports: React.FC = () => {
     name: getTrainerName(id)
   }));
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-
-  const generateTrainerStats = () => {
+  const generateGrandReport = () => {
     setLoadingStats(true);
-    
-    const filteredAttendance = selectedTrainer !== 'all' ? 
-      attendance.filter(a => a.trainerId === selectedTrainer) : attendance;
-    const filteredAssessments = selectedTrainer !== 'all' ? 
-      assessments.filter(a => a.trainerId === selectedTrainer) : assessments;
-    
-    const yearFilteredAttendance = selectedYear !== 'all' ? 
-      filteredAttendance.filter(a => a.year === selectedYear) : filteredAttendance;
-    const yearFilteredAssessments = selectedYear !== 'all' ? 
-      filteredAssessments.filter(a => a.year === selectedYear) : filteredAssessments;
 
-    // Group by trainer
-    const trainerData = trainers.map(trainer => {
-      const trainerAttendance = yearFilteredAttendance.filter(a => a.trainerId === trainer.id);
-      const trainerAssessments = yearFilteredAssessments.filter(a => a.trainerId === trainer.id);
-      
-      // Get unique students for this trainer
-      const trainerStudents = Array.from(new Set([
-        ...trainerAttendance.map(a => a.studentId),
-        ...trainerAssessments.map(a => a.studentId)
-      ])).map(studentId => students.find(s => s.id === studentId)).filter(Boolean);
+    try {
+      // Filter by trainer and year
+      const trainerFilteredAttendance = selectedTrainer !== 'all' ?
+        attendance.filter(a => a.trainerId === selectedTrainer) : attendance;
+      const trainerFilteredAssessments = selectedTrainer !== 'all' ?
+        assessments.filter(a => a.trainerId === selectedTrainer && a.exportedToAdmin === true) :
+        assessments.filter(a => a.exportedToAdmin === true);
 
-      // Calculate statistics
-      const totalAttendanceRecords = trainerAttendance.length;
-      const presentRecords = trainerAttendance.filter(a => 
+      const yearFilteredAttendance = selectedYear !== 'all' ?
+        trainerFilteredAttendance.filter(a => a.year === selectedYear) : trainerFilteredAttendance;
+      const yearFilteredAssessments = selectedYear !== 'all' ?
+        trainerFilteredAssessments.filter(a => a.year === selectedYear) : trainerFilteredAssessments;
+
+      // Get all students who have attendance or assessment records
+      const studentIds = Array.from(new Set([
+        ...yearFilteredAttendance.map(a => a.studentId),
+        ...yearFilteredAssessments.map(a => a.studentId)
+      ]));
+      const filteredStudents = students.filter(s => studentIds.includes(s.id));
+
+      // Calculate summary statistics
+      const totalStudents = filteredStudents.length;
+      const uniqueGroups = Array.from(new Set(filteredStudents.map(s => s.groupId)));
+      const totalGroups = uniqueGroups.length;
+      const totalAttendance = yearFilteredAttendance.length;
+      const totalAssessments = yearFilteredAssessments.length;
+
+      const presentRecords = yearFilteredAttendance.filter(a =>
         a.status === 'present' || a.status === 'late'
       ).length;
-      const attendanceRate = totalAttendanceRecords > 0 ? 
-        Math.round((presentRecords / totalAttendanceRecords) * 100) : 0;
+      const averageAttendanceRate = totalAttendance > 0 ?
+        Math.round((presentRecords / totalAttendance) * 100) : 0;
 
-      const totalAssessments = trainerAssessments.length;
-      const totalScore = trainerAssessments.reduce((sum, a) => sum + a.score, 0);
-      const totalMaxScore = trainerAssessments.reduce((sum, a) => sum + a.maxScore, 0);
-      const averageScore = totalMaxScore > 0 ? 
+      const totalScore = yearFilteredAssessments.reduce((sum, a) => sum + a.score, 0);
+      const totalMaxScore = yearFilteredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+      const averageScore = totalMaxScore > 0 ?
         Math.round((totalScore / totalMaxScore) * 100) : 0;
 
-      // Get assessment types breakdown
-      const assessmentTypes = trainerAssessments.reduce((acc, assessment) => {
-        acc[assessment.assessmentType] = (acc[assessment.assessmentType] || 0) + 1;
-        return acc;
-      }, {} as { [key: string]: number });
-
-      return {
-        trainerId: trainer.id,
-        trainerName: trainer.name,
-        totalStudents: trainerStudents.length,
-        totalAttendanceRecords,
-        attendanceRate,
+      setSummaryStats({
+        totalStudents,
+        totalGroups,
+        totalAttendance,
         totalAssessments,
+        averageAttendanceRate,
         averageScore,
-        assessmentTypes,
-        trainerAttendance,
-        trainerAssessments,
-      };
-    });
+      });
 
-    setTrainerStats(trainerData);
-    setLoadingStats(false);
+      // Collect unique assessments for detailed view
+      const assessmentMap = new Map();
+      yearFilteredAssessments.forEach(assessment => {
+        const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+        if (!assessmentMap.has(key)) {
+          assessmentMap.set(key, {
+            name: assessment.assessmentName,
+            type: assessment.assessmentType,
+            maxScore: assessment.maxScore,
+            date: assessment.date,
+            unit: assessment.unit || '-',
+            week: assessment.week || 0,
+          });
+        }
+      });
+
+      const sortedAssessments = Array.from(assessmentMap.values()).sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateA - dateB;
+      });
+      setUniqueAssessments(sortedAssessments);
+
+      // Generate summary report data
+      const reportData = filteredStudents.map((student, index) => {
+        const studentAttendance = yearFilteredAttendance.filter(a => a.studentId === student.id);
+        const studentAssessments = yearFilteredAssessments.filter(a => a.studentId === student.id);
+
+        const studentPresent = studentAttendance.filter(a =>
+          a.status === 'present' || a.status === 'late'
+        ).length;
+        const attendanceRate = studentAttendance.length > 0 ?
+          Math.round((studentPresent / studentAttendance.length) * 100) : 0;
+
+        const studentTotalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
+        const studentMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+        const studentAverageScore = studentMaxScore > 0 ?
+          Math.round((studentTotalScore / studentMaxScore) * 100) : 0;
+
+        return {
+          rowNumber: index + 1,
+          studentId: student.id,
+          studentName: student.name,
+          groupName: groups.find(g => g.id === student.groupId)?.name || '-',
+          year: student.year,
+          attendanceRate,
+          averageScore: studentAverageScore,
+          totalAssessments: studentAssessments.length,
+        };
+      });
+      setReportData(reportData);
+
+      // Generate detailed report with assessment scores
+      const detailedData = filteredStudents.map((student, index) => {
+        const studentAttendance = yearFilteredAttendance.filter(a => a.studentId === student.id);
+        const studentAssessments = yearFilteredAssessments.filter(a => a.studentId === student.id);
+
+        const studentPresent = studentAttendance.filter(a =>
+          a.status === 'present' || a.status === 'late'
+        ).length;
+        const attendanceRate = studentAttendance.length > 0 ?
+          Math.round((studentPresent / studentAttendance.length) * 100) : 0;
+
+        const studentTotalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
+        const studentMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+        const studentAverageScore = studentMaxScore > 0 ?
+          Math.round((studentTotalScore / studentMaxScore) * 100) : 0;
+
+        // Map scores by assessment key
+        const scoresMap: { [key: string]: { score: number; maxScore: number } } = {};
+        studentAssessments.forEach(assessment => {
+          const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+          scoresMap[key] = {
+            score: assessment.score,
+            maxScore: assessment.maxScore
+          };
+        });
+
+        return {
+          rowNumber: index + 1,
+          studentId: student.id,
+          studentName: student.name,
+          groupName: groups.find(g => g.id === student.groupId)?.name || '-',
+          year: student.year,
+          attendanceRate,
+          assessmentScores: scoresMap,
+          averageScore: studentAverageScore,
+          totalAssessments: studentAssessments.length,
+        };
+      });
+      setDetailedReportData(detailedData);
+
+      // Generate weekly report data
+      interface WeekData {
+        weekNumber: number;
+        assessment: any;
+        date: Date;
+        unit: string;
+      }
+
+      const weekMap = new Map<number, WeekData>();
+      yearFilteredAssessments
+        .filter(assessment => assessment.week !== undefined)
+        .forEach(assessment => {
+          if (!weekMap.has(assessment.week!)) {
+            weekMap.set(assessment.week!, {
+              weekNumber: assessment.week!,
+              assessment,
+              date: new Date(assessment.date),
+              unit: assessment.unit || '-'
+            });
+          }
+        });
+
+      const sortedWeeksList = Array.from(weekMap.values()).sort((a, b) => a.weekNumber - b.weekNumber);
+      setSortedWeeks(sortedWeeksList);
+
+      const weeklyData = filteredStudents.map((student, index) => {
+        const studentAttendance = yearFilteredAttendance.filter(a => a.studentId === student.id);
+        const studentAssessments = yearFilteredAssessments.filter(a => a.studentId === student.id);
+
+        const studentPresent = studentAttendance.filter(a =>
+          a.status === 'present' || a.status === 'late'
+        ).length;
+        const attendanceRate = studentAttendance.length > 0 ?
+          Math.round((studentPresent / studentAttendance.length) * 100) : 0;
+
+        // Map weekly scores
+        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number } } = {};
+        let annualTotal = 0;
+        let annualCount = 0;
+
+        sortedWeeksList.forEach(week => {
+          const weekAssessments = studentAssessments.filter(a => a.week === week.weekNumber);
+          if (weekAssessments.length > 0) {
+            const weekScore = weekAssessments.reduce((sum, a) => sum + a.score, 0);
+            const weekMaxScore = weekAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+            const weekPercentage = weekMaxScore > 0 ?
+              Math.round((weekScore / weekMaxScore) * 100) : 0;
+
+            weeklyScores[week.weekNumber] = {
+              percentage: weekPercentage,
+              assessmentCount: weekAssessments.length
+            };
+
+            annualTotal += weekPercentage;
+            annualCount += 1;
+          }
+        });
+
+        const annualAverage = annualCount > 0 ? Math.round(annualTotal / annualCount) : 0;
+
+        return {
+          rowNumber: index + 1,
+          studentId: student.id,
+          studentName: student.name,
+          groupName: groups.find(g => g.id === student.groupId)?.name || '-',
+          year: student.year,
+          attendanceRate,
+          weeklyScores,
+          annualAverage,
+        };
+      });
+      setWeeklyReportData(weeklyData);
+
+    } catch (error) {
+      logger.error('Error generating grand report:', error);
+    } finally {
+      setLoadingStats(false);
+    }
   };
 
-  const handleExportTrainerReport = (trainerId: string) => {
+  const handleExportGrandReport = () => {
     try {
-      const trainer = trainers.find(t => t.id === trainerId);
-      if (!trainer) return;
+      if (viewMode === 'weekly') {
+        // Filter assessments by trainer
+        const filteredAssessments = selectedTrainer !== 'all' ?
+          assessments.filter(a => a.trainerId === selectedTrainer && a.exportedToAdmin === true) :
+          assessments.filter(a => a.exportedToAdmin === true);
 
-      // Filter data for this specific trainer
-      const trainerAttendance = attendance.filter(a => a.trainerId === trainerId);
-      const trainerAssessments = assessments.filter(a => a.trainerId === trainerId);
-      const trainerStudents = Array.from(new Set([
-        ...trainerAttendance.map(a => a.studentId),
-        ...trainerAssessments.map(a => a.studentId)
-      ])).map(studentId => students.find(s => s.id === studentId)).filter((student): student is Student => student !== undefined);
-
-      // Create custom export for this trainer
-      const year = selectedYear !== 'all' ? selectedYear as number : undefined;
-      exportCombinedReportToExcel(trainerAttendance, trainerAssessments, trainerStudents, groups, year);
+        exportGrandReportWeeklyToExcel(
+          filteredAssessments,
+          students,
+          groups,
+          selectedYear !== 'all' ? selectedYear as number : undefined
+        );
+      } else {
+        // Use detailed report data
+        exportGrandReportDetailedToExcel(
+          detailedReportData,
+          uniqueAssessments,
+          students,
+          groups,
+          selectedYear !== 'all' ? selectedYear as number : undefined
+        );
+      }
     } catch (error) {
       logger.error('Export failed:', error);
     }
@@ -195,9 +352,11 @@ const TrainerReports: React.FC = () => {
 
   useEffect(() => {
     if (selectedTrainer !== 'all' || selectedYear !== 'all') {
-      generateTrainerStats();
+      generateGrandReport();
     } else {
-      setTrainerStats([]);
+      setReportData([]);
+      setDetailedReportData([]);
+      setWeeklyReportData([]);
     }
   }, [selectedTrainer, selectedYear, attendance, assessments, students]);
 
@@ -222,19 +381,19 @@ const TrainerReports: React.FC = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Trainer Reports
+        Trainer Reports - Comprehensive Overview
       </Typography>
 
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={3}>
               <FormControl fullWidth>
-                <InputLabel>Select Trainer</InputLabel>
+                <InputLabel>Filter by Trainer</InputLabel>
                 <Select
                   value={selectedTrainer}
-                  label="Select Trainer"
+                  label="Filter by Trainer"
                   onChange={(e) => setSelectedTrainer(e.target.value)}
                 >
                   <MenuItem value="all">All Trainers</MenuItem>
@@ -244,12 +403,12 @@ const TrainerReports: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={3}>
               <FormControl fullWidth>
-                <InputLabel>Select Year</InputLabel>
+                <InputLabel>Filter by Year</InputLabel>
                 <Select
                   value={selectedYear}
-                  label="Select Year"
+                  label="Filter by Year"
                   onChange={(e) => setSelectedYear(e.target.value as number | 'all')}
                 >
                   <MenuItem value="all">All Years</MenuItem>
@@ -259,13 +418,25 @@ const TrainerReports: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={3}>
               <Button
                 variant="contained"
-                onClick={generateTrainerStats}
+                onClick={generateGrandReport}
                 disabled={loadingStats}
+                fullWidth
               >
                 Generate Report
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={3}>
+              <Button
+                variant="outlined"
+                startIcon={<Download />}
+                onClick={handleExportGrandReport}
+                disabled={loadingStats || reportData.length === 0}
+                fullWidth
+              >
+                Export Report
               </Button>
             </Grid>
           </Grid>
@@ -274,208 +445,347 @@ const TrainerReports: React.FC = () => {
 
       {selectedTrainer === 'all' && selectedYear === 'all' ? (
         <Alert severity="info">
-          Please select a specific trainer or year to view reports.
+          Please select a specific trainer or year to view the grand report.
         </Alert>
       ) : (
         <>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={tabValue} onChange={handleTabChange} aria-label="trainer report tabs">
-              <Tab label="Overview" />
-              <Tab label="Detailed Reports" />
-            </Tabs>
-          </Box>
-
-          <TabPanel value={tabValue} index={0}>
-            {/* Overview Cards */}
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Person sx={{ color: 'primary.main', mr: 2 }} />
-                      <Box>
-                        <Typography variant="h4">{trainers.length}</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Total Trainers
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <People sx={{ color: 'success.main', mr: 2 }} />
-                      <Box>
-                        <Typography variant="h4">
-                          {trainerStats.reduce((sum, t) => sum + t.totalStudents, 0)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Total Students
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Assessment sx={{ color: 'warning.main', mr: 2 }} />
-                      <Box>
-                        <Typography variant="h4">
-                          {trainerStats.reduce((sum, t) => sum + t.totalAttendanceRecords, 0)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Attendance Records
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <School sx={{ color: 'error.main', mr: 2 }} />
-                      <Box>
-                        <Typography variant="h4">
-                          {trainerStats.reduce((sum, t) => sum + t.totalAssessments, 0)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Assessment Records
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-
-            {/* Trainer Statistics Table */}
-            {loadingStats ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
+          {/* Summary Statistics */}
+          <Grid container spacing={3} sx={{ mb: 3 }}>
+            <Grid item xs={12} sm={6} md={2}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Trainer Performance Summary
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <People sx={{ color: 'primary.main', mr: 2 }} />
+                    <Box>
+                      <Typography variant="h4">{summaryStats.totalStudents}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Students
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <School sx={{ color: 'success.main', mr: 2 }} />
+                    <Box>
+                      <Typography variant="h4">{summaryStats.totalGroups}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Groups
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Assessment sx={{ color: 'warning.main', mr: 2 }} />
+                    <Box>
+                      <Typography variant="h4">{summaryStats.totalAttendance}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Attendance Records
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Person sx={{ color: 'error.main', mr: 2 }} />
+                    <Box>
+                      <Typography variant="h4">{summaryStats.totalAssessments}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Assessment Records
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <TrendingUp sx={{ color: 'info.main', mr: 2 }} />
+                    <Box>
+                      <Typography variant="h4">{summaryStats.averageAttendanceRate}%</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Avg Attendance Rate
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <TrendingUp sx={{ color: 'secondary.main', mr: 2 }} />
+                    <Box>
+                      <Typography variant="h4">{summaryStats.averageScore}%</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Average Score
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
+          {/* Detailed Report Table */}
+          {loadingStats ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+                  <Typography variant="h6">
+                    Student Report ({reportData.length} students)
                   </Typography>
-                  <TableContainer component={Paper}>
-                    <Table>
+                  <ToggleButtonGroup
+                    value={viewMode}
+                    exclusive
+                    onChange={(e, newMode) => {
+                      if (newMode !== null) {
+                        setViewMode(newMode);
+                      }
+                    }}
+                    size="small"
+                  >
+                    <ToggleButton value="summary">
+                      <Tooltip title="Summary view with aggregated scores">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <ViewList fontSize="small" />
+                          <span>Summary</span>
+                        </Box>
+                      </Tooltip>
+                    </ToggleButton>
+                    <ToggleButton value="detailed">
+                      <Tooltip title="Detailed view with individual assessment scores">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <TableChart fontSize="small" />
+                          <span>By Assessment</span>
+                        </Box>
+                      </Tooltip>
+                    </ToggleButton>
+                    <ToggleButton value="weekly">
+                      <Tooltip title="Week-based view showing weekly performance">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <CalendarToday fontSize="small" />
+                          <span>Weekly</span>
+                        </Box>
+                      </Tooltip>
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                {/* Summary View */}
+                {viewMode === 'summary' && (
+                  <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+                    <Table stickyHeader>
                       <TableHead>
                         <TableRow>
-                          <TableCell>Trainer</TableCell>
-                          <TableCell align="center">Students</TableCell>
+                          <TableCell>#</TableCell>
+                          <TableCell>Student Name</TableCell>
+                          <TableCell>Group</TableCell>
+                          <TableCell align="center">Year</TableCell>
                           <TableCell align="center">Attendance Rate</TableCell>
-                          <TableCell align="center">Avg Score</TableCell>
-                          <TableCell align="center">Assessments</TableCell>
-                          <TableCell align="center">Actions</TableCell>
+                          <TableCell align="center">Average Score</TableCell>
+                          <TableCell align="center">Total Assessments</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {trainerStats.map((trainer) => (
-                          <TableRow key={trainer.trainerId}>
-                            <TableCell>{trainer.trainerName}</TableCell>
-                            <TableCell align="center">{trainer.totalStudents}</TableCell>
+                        {reportData.map((row) => (
+                          <TableRow key={row.studentId}>
+                            <TableCell>{row.rowNumber}</TableCell>
+                            <TableCell>{row.studentName}</TableCell>
+                            <TableCell>{row.groupName}</TableCell>
+                            <TableCell align="center">{row.year}</TableCell>
                             <TableCell align="center">
                               <Chip
-                                label={`${trainer.attendanceRate}%`}
-                                color={trainer.attendanceRate >= 80 ? 'success' : trainer.attendanceRate >= 60 ? 'warning' : 'error'}
-                              />
-                            </TableCell>
-                            <TableCell align="center">
-                              <Chip
-                                label={`${trainer.averageScore}%`}
-                                color={trainer.averageScore >= 80 ? 'success' : trainer.averageScore >= 70 ? 'primary' : trainer.averageScore >= 60 ? 'warning' : 'error'}
-                              />
-                            </TableCell>
-                            <TableCell align="center">{trainer.totalAssessments}</TableCell>
-                            <TableCell align="center">
-                              <Button
+                                label={`${row.attendanceRate}%`}
+                                color={row.attendanceRate >= 80 ? 'success' : row.attendanceRate >= 60 ? 'warning' : 'error'}
                                 size="small"
-                                variant="outlined"
-                                startIcon={<Download />}
-                                onClick={() => handleExportTrainerReport(trainer.trainerId)}
-                              >
-                                Export
-                              </Button>
+                              />
+                            </TableCell>
+                            <TableCell align="center">
+                              <Chip
+                                label={`${row.averageScore}%`}
+                                color={row.averageScore >= 80 ? 'success' : row.averageScore >= 70 ? 'primary' : row.averageScore >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell align="center">{row.totalAssessments}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+
+                {/* Detailed View - By Assessment */}
+                {viewMode === 'detailed' && (
+                  <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 3 }}>#</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 3 }}>Student Name</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 200, bgcolor: 'background.paper', zIndex: 3 }}>Group</TableCell>
+                          <TableCell align="center">Year</TableCell>
+                          <TableCell align="center">Attendance</TableCell>
+                          {uniqueAssessments.map((assessment, idx) => (
+                            <TableCell key={idx} align="center" sx={{ minWidth: 100 }}>
+                              <Tooltip title={`${assessment.type} - ${assessment.unit} - ${new Date(assessment.date).toLocaleDateString()}`}>
+                                <Box>
+                                  <Typography variant="caption" display="block">
+                                    {assessment.name}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    W{assessment.week} ({assessment.maxScore})
+                                  </Typography>
+                                </Box>
+                              </Tooltip>
+                            </TableCell>
+                          ))}
+                          <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>Avg %</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {detailedReportData.map((row) => (
+                          <TableRow key={row.studentId}>
+                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>{row.rowNumber}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1 }}>{row.studentName}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 200, bgcolor: 'background.paper', zIndex: 1 }}>{row.groupName}</TableCell>
+                            <TableCell align="center">{row.year}</TableCell>
+                            <TableCell align="center">
+                              <Chip
+                                label={`${row.attendanceRate}%`}
+                                color={row.attendanceRate >= 80 ? 'success' : row.attendanceRate >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            {uniqueAssessments.map((assessment, idx) => {
+                              const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
+                              const scoreData = row.assessmentScores[key];
+                              return (
+                                <TableCell key={idx} align="center">
+                                  {scoreData ? (
+                                    <Chip
+                                      label={`${scoreData.score}/${scoreData.maxScore}`}
+                                      color={
+                                        (scoreData.score / scoreData.maxScore) >= 0.8 ? 'success' :
+                                        (scoreData.score / scoreData.maxScore) >= 0.7 ? 'primary' :
+                                        (scoreData.score / scoreData.maxScore) >= 0.6 ? 'warning' : 'error'
+                                      }
+                                      size="small"
+                                    />
+                                  ) : '-'}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
+                              <Chip
+                                label={`${row.averageScore}%`}
+                                color={row.averageScore >= 80 ? 'success' : row.averageScore >= 70 ? 'primary' : row.averageScore >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
                             </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </TableContainer>
-                </CardContent>
-              </Card>
-            )}
-          </TabPanel>
+                )}
 
-          <TabPanel value={tabValue} index={1}>
-            {/* Detailed Reports */}
-            {trainerStats.map((trainer) => (
-              <Card key={trainer.trainerId} sx={{ mb: 3 }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">{trainer.trainerName}</Typography>
-                    <Button
-                      variant="outlined"
-                      startIcon={<Download />}
-                      onClick={() => handleExportTrainerReport(trainer.trainerId)}
-                    >
-                      Export Report
-                    </Button>
-                  </Box>
-                  
-                  <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={6} sm={3}>
-                      <Typography variant="body2" color="text.secondary">
-                        Students: {trainer.totalStudents}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Typography variant="body2" color="text.secondary">
-                        Attendance Rate: {trainer.attendanceRate}%
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Typography variant="body2" color="text.secondary">
-                        Avg Score: {trainer.averageScore}%
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Typography variant="body2" color="text.secondary">
-                        Assessments: {trainer.totalAssessments}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-
-                  <Divider sx={{ my: 2 }} />
-
-                  <Typography variant="subtitle2" gutterBottom>
-                    Assessment Types:
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                    {Object.entries(trainer.assessmentTypes).map(([type, count]) => (
-                      <Chip
-                        key={type}
-                        label={`${type}: ${count}`}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
-                    ))}
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-          </TabPanel>
+                {/* Weekly View */}
+                {viewMode === 'weekly' && (
+                  <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 3 }}>#</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 3 }}>Student Name</TableCell>
+                          <TableCell sx={{ position: 'sticky', left: 200, bgcolor: 'background.paper', zIndex: 3 }}>Group</TableCell>
+                          <TableCell align="center">Year</TableCell>
+                          <TableCell align="center">Attendance</TableCell>
+                          {sortedWeeks.map((week) => (
+                            <TableCell key={week.weekNumber} align="center" sx={{ minWidth: 80 }}>
+                              <Tooltip title={`Unit: ${week.unit} - ${new Date(week.date).toLocaleDateString()}`}>
+                                <Typography variant="caption">
+                                  W{week.weekNumber}
+                                </Typography>
+                              </Tooltip>
+                            </TableCell>
+                          ))}
+                          <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
+                            Annual Avg
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {weeklyReportData.map((row) => (
+                          <TableRow key={row.studentId}>
+                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>{row.rowNumber}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1 }}>{row.studentName}</TableCell>
+                            <TableCell sx={{ position: 'sticky', left: 200, bgcolor: 'background.paper', zIndex: 1 }}>{row.groupName}</TableCell>
+                            <TableCell align="center">{row.year}</TableCell>
+                            <TableCell align="center">
+                              <Chip
+                                label={`${row.attendanceRate}%`}
+                                color={row.attendanceRate >= 80 ? 'success' : row.attendanceRate >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            {sortedWeeks.map((week) => {
+                              const weekScore = row.weeklyScores[week.weekNumber];
+                              return (
+                                <TableCell key={week.weekNumber} align="center">
+                                  {weekScore ? (
+                                    <Chip
+                                      label={`${weekScore.percentage}%`}
+                                      color={
+                                        weekScore.percentage >= 80 ? 'success' :
+                                        weekScore.percentage >= 70 ? 'primary' :
+                                        weekScore.percentage >= 60 ? 'warning' : 'error'
+                                      }
+                                      size="small"
+                                    />
+                                  ) : '-'}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
+                              <Chip
+                                label={`${row.annualAverage}%`}
+                                color={row.annualAverage >= 80 ? 'success' : row.annualAverage >= 70 ? 'primary' : row.annualAverage >= 60 ? 'warning' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </Box>
