@@ -123,6 +123,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Students', icon: <People />, path: '/students' },
     { text: 'Input Data', icon: <Assessment />, path: '/input' },
     { text: 'Assessments', icon: <Quiz />, path: '/assessments' },
+    { text: 'Attendance Report', icon: <BarChart />, path: '/attendance-report' },
   ];
 
   // Add admin-only menu items

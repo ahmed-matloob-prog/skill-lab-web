@@ -2278,3 +2278,121 @@ export const generateStudentGroupImportTemplate = (groups: Group[]): void => {
   const fileName = `student_group_import_template_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(data, fileName);
 };
+
+// Attendance Grid Report Export
+export const exportAttendanceGridToExcel = (
+  reportData: any[],
+  uniqueDates: string[],
+  startDateStr: string,
+  endDateStr: string,
+  filename: string
+): void => {
+  const workbook = XLSX.utils.book_new();
+
+  // ============= SHEET 1: Attendance Grid =============
+  const gridData: any[] = [];
+
+  // Header row 1 - Title and info
+  const headerRow1: any = {};
+  headerRow1['#'] = 'Attendance Report';
+  headerRow1['Student Name'] = `Date Range: ${startDateStr} - ${endDateStr}`;
+  headerRow1['Student ID'] = `Generated: ${new Date().toLocaleDateString()}`;
+  headerRow1['Group'] = '';
+  uniqueDates.forEach(date => {
+    const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    headerRow1[formattedDate] = '';
+  });
+  headerRow1['Total Days'] = '';
+  headerRow1['Present'] = '';
+  headerRow1['Absent'] = '';
+  headerRow1['Attendance %'] = '';
+  gridData.push(headerRow1);
+
+  // Header row 2 - Empty
+  const headerRow2: any = {};
+  headerRow2['#'] = '';
+  headerRow2['Student Name'] = '';
+  headerRow2['Student ID'] = '';
+  headerRow2['Group'] = '';
+  uniqueDates.forEach(date => {
+    const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    headerRow2[formattedDate] = '';
+  });
+  headerRow2['Total Days'] = '';
+  headerRow2['Present'] = '';
+  headerRow2['Absent'] = '';
+  headerRow2['Attendance %'] = '';
+  gridData.push(headerRow2);
+
+  // Data rows
+  reportData.forEach((student, index) => {
+    const rowData: any = {};
+    rowData['#'] = index + 1;
+    rowData['Student Name'] = student.studentName;
+    rowData['Student ID'] = student.studentIdNumber;
+    rowData['Group'] = student.groupName;
+
+    // Add attendance for each date
+    uniqueDates.forEach(date => {
+      const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const value = student.attendanceByDate[date];
+      rowData[formattedDate] = value === '-' ? '-' : value;
+    });
+
+    rowData['Total Days'] = student.totalDays;
+    rowData['Present'] = student.presentCount;
+    rowData['Absent'] = student.absentCount;
+    rowData['Attendance %'] = student.attendanceRate;
+
+    gridData.push(rowData);
+  });
+
+  const sheet1 = XLSX.utils.json_to_sheet(gridData);
+
+  // Set column widths
+  const colWidths = [
+    { wch: 5 },  // #
+    { wch: 25 }, // Student Name
+    { wch: 15 }, // Student ID
+    { wch: 15 }, // Group
+    ...uniqueDates.map(() => ({ wch: 8 })), // Date columns
+    { wch: 12 }, // Total Days
+    { wch: 10 }, // Present
+    { wch: 10 }, // Absent
+    { wch: 12 }, // Attendance %
+  ];
+  sheet1['!cols'] = colWidths;
+
+  // Apply cell styling with colors
+  const range = XLSX.utils.decode_range(sheet1['!ref'] || 'A1');
+  for (let R = 2; R <= range.e.r; R++) { // Start from row 2 (skip headers)
+    for (let C = 4; C < 4 + uniqueDates.length; C++) { // Date columns only
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = sheet1[cellAddress];
+
+      if (cell) {
+        const value = cell.v;
+        if (!cell.s) cell.s = {};
+
+        if (value === 1 || value === '1') {
+          // Green for present (1)
+          cell.s.fill = { fgColor: { rgb: 'C8E6C9' } };
+        } else if (value === 0 || value === '0') {
+          // Red for absent (0)
+          cell.s.fill = { fgColor: { rgb: 'FFCDD2' } };
+        } else if (value === '-') {
+          // Gray for no record (-)
+          cell.s.fill = { fgColor: { rgb: 'F5F5F5' } };
+        }
+      }
+    }
+  }
+
+  XLSX.utils.book_append_sheet(workbook, sheet1, 'Attendance Grid');
+
+  // Generate Excel file
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  saveAs(data, `${filename}.xlsx`);
+};

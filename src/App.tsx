@@ -17,6 +17,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Students = lazy(() => import('./pages/Students'));
 const CombinedInput = lazy(() => import('./pages/CombinedInput'));
 const Assessments = lazy(() => import('./pages/Assessments'));
+const AttendanceReport = lazy(() => import('./pages/AttendanceReport'));
 const Admin = lazy(() => import('./pages/Admin'));
 
 // Create Material-UI theme
@@ -130,6 +131,7 @@ const AppContent: React.FC = () => {
                       <Route path="/students" element={<Students />} />
                       <Route path="/input" element={<CombinedInput />} />
                       <Route path="/assessments" element={<Assessments />} />
+                      <Route path="/attendance-report" element={<AttendanceReport />} />
                       <Route
                         path="/admin"
                         element={
