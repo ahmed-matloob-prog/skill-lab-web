@@ -198,7 +198,9 @@ const CombinedInput: React.FC = () => {
       ...prev,
       [studentId]: {
         ...prev[studentId],
-        attendance: status
+        attendance: status,
+        // Clear score if marking as absent
+        score: status === 'absent' ? '' : prev[studentId]?.score || ''
       }
     }));
   };
@@ -258,8 +260,15 @@ const CombinedInput: React.FC = () => {
           attendanceCount++;
         }
 
-        // Save assessment score if provided
+        // Save assessment score if provided (but not for absent students)
         if (data.score && data.score.trim() !== '') {
+          // Prevent saving scores for absent students
+          if (data.attendance === 'absent') {
+            setError(`Cannot save assessment score for ${student.name} - student is marked as absent`);
+            setLoadingSave(false);
+            return;
+          }
+
           const score = parseInt(data.score);
           if (isNaN(score) || score < 0 || score > maxScoreNum) {
             setError(`Invalid score for ${student.name}. Score must be between 0 and ${maxScoreNum}`);
@@ -576,6 +585,8 @@ const CombinedInput: React.FC = () => {
                               placeholder="0"
                               inputProps={{ min: 0, max: assessmentForm.maxScore }}
                               sx={{ width: 100 }}
+                              disabled={currentData.attendance === 'absent'}
+                              helperText={currentData.attendance === 'absent' ? 'N/A (Absent)' : ''}
                             />
                           </TableCell>
                         </TableRow>
