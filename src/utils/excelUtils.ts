@@ -2279,10 +2279,10 @@ export const generateStudentGroupImportTemplate = (groups: Group[]): void => {
   saveAs(data, fileName);
 };
 
-// Attendance Grid Report Export
+// Assessment-Based Attendance Grid Report Export
 export const exportAttendanceGridToExcel = (
   reportData: any[],
-  uniqueDates: string[],
+  assessmentColumns: any[],
   startDateStr: string,
   endDateStr: string,
   filename: string
@@ -2294,13 +2294,13 @@ export const exportAttendanceGridToExcel = (
 
   // Header row 1 - Title and info
   const headerRow1: any = {};
-  headerRow1['#'] = 'Attendance Report';
+  headerRow1['#'] = 'Assessment-Based Attendance Report';
   headerRow1['Student Name'] = `Date Range: ${startDateStr} - ${endDateStr}`;
   headerRow1['Student ID'] = `Generated: ${new Date().toLocaleDateString()}`;
   headerRow1['Group'] = '';
-  uniqueDates.forEach(date => {
-    const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    headerRow1[formattedDate] = '';
+  assessmentColumns.forEach(assessment => {
+    const assessmentHeader = `${assessment.assessmentName} (${assessment.maxScore})`;
+    headerRow1[assessmentHeader] = '';
   });
   headerRow1['Total Days'] = '';
   headerRow1['Present'] = '';
@@ -2308,20 +2308,21 @@ export const exportAttendanceGridToExcel = (
   headerRow1['Attendance %'] = '';
   gridData.push(headerRow1);
 
-  // Header row 2 - Empty
+  // Header row 2 - Assessment dates
   const headerRow2: any = {};
-  headerRow2['#'] = '';
-  headerRow2['Student Name'] = '';
-  headerRow2['Student ID'] = '';
-  headerRow2['Group'] = '';
-  uniqueDates.forEach(date => {
-    const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    headerRow2[formattedDate] = '';
+  headerRow2['#'] = '#';
+  headerRow2['Student Name'] = 'Student Name';
+  headerRow2['Student ID'] = 'Student ID';
+  headerRow2['Group'] = 'Group';
+  assessmentColumns.forEach(assessment => {
+    const assessmentHeader = `${assessment.assessmentName} (${assessment.maxScore})`;
+    const formattedDate = new Date(assessment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    headerRow2[assessmentHeader] = formattedDate;
   });
-  headerRow2['Total Days'] = '';
-  headerRow2['Present'] = '';
-  headerRow2['Absent'] = '';
-  headerRow2['Attendance %'] = '';
+  headerRow2['Total Days'] = 'Total Days';
+  headerRow2['Present'] = 'Present';
+  headerRow2['Absent'] = 'Absent';
+  headerRow2['Attendance %'] = 'Attendance %';
   gridData.push(headerRow2);
 
   // Data rows
@@ -2332,11 +2333,11 @@ export const exportAttendanceGridToExcel = (
     rowData['Student ID'] = student.studentIdNumber;
     rowData['Group'] = student.groupName;
 
-    // Add attendance for each date
-    uniqueDates.forEach(date => {
-      const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const value = student.attendanceByDate[date];
-      rowData[formattedDate] = value === '-' ? '-' : value;
+    // Add attendance for each assessment
+    assessmentColumns.forEach(assessment => {
+      const assessmentHeader = `${assessment.assessmentName} (${assessment.maxScore})`;
+      const value = student.attendanceByAssessment[assessment.assessmentId];
+      rowData[assessmentHeader] = value === '-' ? '-' : value;
     });
 
     rowData['Total Days'] = student.totalDays;
@@ -2355,7 +2356,7 @@ export const exportAttendanceGridToExcel = (
     { wch: 25 }, // Student Name
     { wch: 15 }, // Student ID
     { wch: 15 }, // Group
-    ...uniqueDates.map(() => ({ wch: 8 })), // Date columns
+    ...assessmentColumns.map(() => ({ wch: 18 })), // Assessment columns (wider for name + score)
     { wch: 12 }, // Total Days
     { wch: 10 }, // Present
     { wch: 10 }, // Absent
@@ -2365,8 +2366,8 @@ export const exportAttendanceGridToExcel = (
 
   // Apply cell styling with colors
   const range = XLSX.utils.decode_range(sheet1['!ref'] || 'A1');
-  for (let R = 2; R <= range.e.r; R++) { // Start from row 2 (skip headers)
-    for (let C = 4; C < 4 + uniqueDates.length; C++) { // Date columns only
+  for (let R = 2; R <= range.e.r; R++) { // Start from row 2 (skip title and header rows)
+    for (let C = 4; C < 4 + assessmentColumns.length; C++) { // Assessment columns only
       const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
       const cell = sheet1[cellAddress];
 
@@ -2388,7 +2389,7 @@ export const exportAttendanceGridToExcel = (
     }
   }
 
-  XLSX.utils.book_append_sheet(workbook, sheet1, 'Attendance Grid');
+  XLSX.utils.book_append_sheet(workbook, sheet1, 'Assessment Attendance');
 
   // Generate Excel file
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });

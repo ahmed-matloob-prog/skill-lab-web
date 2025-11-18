@@ -26,7 +26,7 @@ import {
   Download,
   CalendarToday,
   People,
-  Assessment,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -37,13 +37,25 @@ import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
 import { exportAttendanceGridToExcel } from '../utils/excelUtils';
 
+interface AssessmentColumn {
+  assessmentId: string;
+  assessmentName: string;
+  assessmentType: string;
+  maxScore: number;
+  date: string;
+  trainerId: string;
+  groupId: string;
+  unit: string;
+  week?: number;
+}
+
 interface AttendanceGridData {
   studentId: string;
   studentName: string;
   studentIdNumber: string;
   groupName: string;
   year: number;
-  attendanceByDate: { [date: string]: 1 | 0 | '-' };
+  attendanceByAssessment: { [assessmentId: string]: 1 | 0 | '-' };
   totalDays: number;
   presentCount: number;
   absentCount: number;
@@ -51,7 +63,7 @@ interface AttendanceGridData {
 }
 
 const AttendanceReport: React.FC = () => {
-  const { students, groups, attendance, loading } = useDatabase();
+  const { students, groups, attendance, assessments, loading } = useDatabase();
   const { user } = useAuth();
 
   // Filter states
@@ -64,11 +76,11 @@ const AttendanceReport: React.FC = () => {
 
   // Report data states
   const [reportData, setReportData] = useState<AttendanceGridData[]>([]);
-  const [uniqueDates, setUniqueDates] = useState<string[]>([]);
+  const [assessmentColumns, setAssessmentColumns] = useState<AssessmentColumn[]>([]);
   const [summaryStats, setSummaryStats] = useState({
     totalStudents: 0,
+    totalAssessments: 0,
     averageAttendanceRate: 0,
-    totalDays: 0,
   });
   const [loadingReport, setLoadingReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +109,27 @@ const AttendanceReport: React.FC = () => {
   const accessibleGroups = user?.role === 'admin' ? groups :
     groups.filter(group => user?.assignedGroups?.includes(group.id));
 
+  // Get attendance value for a specific student and assessment
+  const getAttendanceValue = (
+    studentId: string,
+    assessmentDate: string,
+    assessmentTrainerId: string,
+    assessmentGroupId: string
+  ): 1 | 0 | '-' => {
+    const record = attendance.find(
+      a =>
+        a.studentId === studentId &&
+        a.date === assessmentDate &&
+        a.trainerId === assessmentTrainerId &&
+        a.groupId === assessmentGroupId
+    );
+
+    if (!record) return '-';
+    if (record.status === 'present' || record.status === 'late') return 1;
+    if (record.status === 'absent') return 0;
+    return '-';
+  };
+
   // Generate attendance report
   const generateAttendanceReport = () => {
     setLoadingReport(true);
@@ -110,7 +143,59 @@ const AttendanceReport: React.FC = () => {
         return;
       }
 
-      // Filter students based on permissions and selections
+      // Step 1: Filter assessments by permissions
+      let filteredAssessments = assessments.filter(a => {
+        // For trainers: only their assessments (both exported and not)
+        if (user?.role === 'trainer') {
+          if (a.trainerId !== user.id) return false;
+          // Also filter by assigned groups/years
+          if (user?.assignedGroups && !user.assignedGroups.includes(a.groupId)) return false;
+          if (user?.assignedYears && !user.assignedYears.includes(a.year)) return false;
+        }
+
+        // For admin: only exported assessments
+        if (user?.role === 'admin') {
+          if (!a.exportedToAdmin) return false;
+        }
+
+        return true;
+      });
+
+      // Step 2: Filter by user selections (year, group, unit, date range, trainer)
+      filteredAssessments = filteredAssessments.filter(a => {
+        const assessmentDate = dayjs(a.date);
+        const inDateRange =
+          (assessmentDate.isAfter(startDate, 'day') || assessmentDate.isSame(startDate, 'day')) &&
+          (assessmentDate.isBefore(endDate, 'day') || assessmentDate.isSame(endDate, 'day'));
+
+        if (!inDateRange) return false;
+        if (selectedYear !== 'all' && a.year !== selectedYear) return false;
+        if (selectedGroup !== 'all' && a.groupId !== selectedGroup) return false;
+        if (selectedUnit !== 'all' && a.unit !== selectedUnit) return false;
+        if (selectedTrainer !== 'all' && a.trainerId !== selectedTrainer) return false;
+
+        return true;
+      });
+
+      // Step 3: Sort by date (chronological)
+      filteredAssessments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Step 4: Create assessment columns
+      const columns: AssessmentColumn[] = filteredAssessments.map(a => ({
+        assessmentId: a.id,
+        assessmentName: a.assessmentName,
+        assessmentType: a.assessmentType,
+        maxScore: a.maxScore,
+        date: a.date,
+        trainerId: a.trainerId,
+        groupId: a.groupId,
+        unit: a.unit || '-',
+        week: a.week,
+      }));
+
+      setAssessmentColumns(columns);
+
+      // Step 5: Filter students based on permissions and selections
       let filteredStudents = students.filter(student => {
         // For trainers, only show students from their assigned groups AND assigned years
         if (user?.role === 'trainer') {
@@ -133,60 +218,28 @@ const AttendanceReport: React.FC = () => {
         return true;
       });
 
-      // Filter attendance records
-      let filteredAttendance = attendance.filter(record => {
-        const recordDate = dayjs(record.date);
-        const inDateRange = (recordDate.isAfter(startDate, 'day') || recordDate.isSame(startDate, 'day')) &&
-                           (recordDate.isBefore(endDate, 'day') || recordDate.isSame(endDate, 'day'));
-
-        if (!inDateRange) return false;
-
-        // For trainers, filter by their assigned groups/years
-        if (user?.role === 'trainer') {
-          if (user?.assignedGroups && !user.assignedGroups.includes(record.groupId)) {
-            return false;
-          }
-          if (user?.assignedYears && !user.assignedYears.includes(record.year)) {
-            return false;
-          }
-        }
-
-        // Filter by trainer (admin only)
-        if (selectedTrainer !== 'all' && record.trainerId !== selectedTrainer) return false;
-
-        return true;
-      });
-
-      // Generate list of unique dates in range
-      const dates: string[] = [];
-      let currentDate = startDate.clone();
-      while (currentDate.isBefore(endDate, 'day') || currentDate.isSame(endDate, 'day')) {
-        dates.push(currentDate.format('YYYY-MM-DD'));
-        currentDate = currentDate.add(1, 'day');
-      }
-      setUniqueDates(dates);
-
-      // Build attendance grid data
+      // Step 6: Build attendance grid data
       const gridData: AttendanceGridData[] = filteredStudents.map(student => {
-        const studentAttendance = filteredAttendance.filter(a => a.studentId === student.id);
-        const attendanceByDate: { [date: string]: 1 | 0 | '-' } = {};
+        const attendanceByAssessment: { [key: string]: 1 | 0 | '-' } = {};
+        let totalDays = 0;
         let presentCount = 0;
         let absentCount = 0;
-        let totalDays = 0;
 
-        dates.forEach(date => {
-          const record = studentAttendance.find(a => a.date === date);
-          if (record) {
+        columns.forEach(assessment => {
+          const value = getAttendanceValue(
+            student.id,
+            assessment.date,
+            assessment.trainerId,
+            assessment.groupId
+          );
+
+          attendanceByAssessment[assessment.assessmentId] = value;
+
+          // Only count if there's an actual record (not '-')
+          if (value !== '-') {
             totalDays++;
-            if (record.status === 'present' || record.status === 'late') {
-              attendanceByDate[date] = 1;
-              presentCount++;
-            } else {
-              attendanceByDate[date] = 0;
-              absentCount++;
-            }
-          } else {
-            attendanceByDate[date] = '-';
+            if (value === 1) presentCount++;
+            if (value === 0) absentCount++;
           }
         });
 
@@ -199,7 +252,7 @@ const AttendanceReport: React.FC = () => {
           studentIdNumber: student.studentId,
           groupName: group ? group.name : 'Unknown',
           year: student.year,
-          attendanceByDate,
+          attendanceByAssessment,
           totalDays,
           presentCount,
           absentCount,
@@ -209,19 +262,19 @@ const AttendanceReport: React.FC = () => {
 
       setReportData(gridData);
 
-      // Calculate summary statistics
+      // Step 7: Calculate summary statistics
       const totalStudents = gridData.length;
-      const totalDays = dates.length;
-      const avgAttendanceRate = totalStudents > 0
-        ? Math.round(gridData.reduce((sum, s) => sum + s.attendanceRate, 0) / totalStudents)
-        : 0;
+      const totalAssessments = columns.length;
+      const avgAttendanceRate =
+        totalStudents > 0
+          ? Math.round(gridData.reduce((sum, s) => sum + s.attendanceRate, 0) / totalStudents)
+          : 0;
 
       setSummaryStats({
         totalStudents,
+        totalAssessments,
         averageAttendanceRate: avgAttendanceRate,
-        totalDays,
       });
-
     } catch (error) {
       logger.error('Error generating attendance report:', error);
       setError('Failed to generate report. Please try again.');
@@ -240,15 +293,16 @@ const AttendanceReport: React.FC = () => {
     try {
       // Build filename with filters
       const yearText = selectedYear !== 'all' ? `Year${selectedYear}` : 'AllYears';
-      const groupText = selectedGroup !== 'all'
-        ? groups.find(g => g.id === selectedGroup)?.name.replace(/\s+/g, '')
-        : 'AllGroups';
+      const groupText =
+        selectedGroup !== 'all'
+          ? groups.find(g => g.id === selectedGroup)?.name.replace(/\s+/g, '')
+          : 'AllGroups';
       const monthText = startDate.format('MMM YYYY');
-      const filename = `Attendance_Report_${yearText}_${groupText}_${monthText}`;
+      const filename = `Attendance_Assessment_Report_${yearText}_${groupText}_${monthText}`;
 
       exportAttendanceGridToExcel(
         reportData,
-        uniqueDates,
+        assessmentColumns,
         startDate.format('MMM DD, YYYY'),
         endDate.format('MMM DD, YYYY'),
         filename
@@ -292,7 +346,7 @@ const AttendanceReport: React.FC = () => {
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Box>
         <Typography variant="h4" gutterBottom>
-          Attendance Report
+          Attendance Report (Assessment-Based)
         </Typography>
 
         {/* Filter Section */}
@@ -331,7 +385,9 @@ const AttendanceReport: React.FC = () => {
                   >
                     <MenuItem value="all">All Years</MenuItem>
                     {[1, 2, 3, 4, 5, 6].map(year => (
-                      <MenuItem key={year} value={year}>Year {year}</MenuItem>
+                      <MenuItem key={year} value={year}>
+                        Year {year}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -346,13 +402,20 @@ const AttendanceReport: React.FC = () => {
                   >
                     <MenuItem value="all">All Groups</MenuItem>
                     {accessibleGroups.map(group => (
-                      <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
+                      <MenuItem key={group.id} value={group.id}>
+                        {group.name}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth disabled={selectedYear === 'all' || (selectedYear !== 2 && selectedYear !== 3)}>
+                <FormControl
+                  fullWidth
+                  disabled={
+                    selectedYear === 'all' || (selectedYear !== 2 && selectedYear !== 3)
+                  }
+                >
                   <InputLabel>Unit</InputLabel>
                   <Select
                     value={selectedUnit}
@@ -361,7 +424,9 @@ const AttendanceReport: React.FC = () => {
                   >
                     <MenuItem value="all">All Units</MenuItem>
                     {getUnitOptions(selectedYear as number).map(unit => (
-                      <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>
+                      <MenuItem key={unit.value} value={unit.value}>
+                        {unit.label}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -417,7 +482,7 @@ const AttendanceReport: React.FC = () => {
         {/* Summary Statistics */}
         {reportData.length > 0 && (
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -430,44 +495,29 @@ const AttendanceReport: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Assessment sx={{ mr: 1, color: 'success.main' }} />
+                    <AssessmentIcon sx={{ mr: 1, color: 'info.main' }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Total Assessments
+                    </Typography>
+                  </Box>
+                  <Typography variant="h4">{summaryStats.totalAssessments}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <CalendarToday sx={{ mr: 1, color: 'success.main' }} />
                     <Typography variant="body2" color="text.secondary">
                       Avg Attendance Rate
                     </Typography>
                   </Box>
                   <Typography variant="h4">{summaryStats.averageAttendanceRate}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <CalendarToday sx={{ mr: 1, color: 'info.main' }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Total Days
-                    </Typography>
-                  </Box>
-                  <Typography variant="h4">{summaryStats.totalDays}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <CalendarToday sx={{ mr: 1, color: 'warning.main' }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Date Range
-                    </Typography>
-                  </Box>
-                  <Typography variant="body1">
-                    {startDate.format('MMM DD')} - {endDate.format('MMM DD, YYYY')}
-                  </Typography>
                 </CardContent>
               </Card>
             </Grid>
@@ -483,44 +533,166 @@ const AttendanceReport: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Attendance Grid ({reportData.length} students)
+                Assessment Attendance Grid ({reportData.length} students, {assessmentColumns.length}{' '}
+                assessments)
               </Typography>
               <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
                 <Table stickyHeader size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ minWidth: 50, position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 3 }}>#</TableCell>
-                      <TableCell sx={{ minWidth: 200, position: 'sticky', left: 50, backgroundColor: 'background.paper', zIndex: 3 }}>Student Name</TableCell>
-                      <TableCell sx={{ minWidth: 120, position: 'sticky', left: 250, backgroundColor: 'background.paper', zIndex: 3 }}>Student ID</TableCell>
-                      <TableCell sx={{ minWidth: 100, position: 'sticky', left: 370, backgroundColor: 'background.paper', zIndex: 3 }}>Group</TableCell>
-                      {uniqueDates.map(date => (
-                        <TableCell key={date} align="center" sx={{ minWidth: 60 }}>
-                          {dayjs(date).format('M/D')}
+                      <TableCell
+                        rowSpan={2}
+                        sx={{
+                          minWidth: 50,
+                          position: 'sticky',
+                          left: 0,
+                          backgroundColor: 'background.paper',
+                          zIndex: 4,
+                        }}
+                      >
+                        #
+                      </TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        sx={{
+                          minWidth: 200,
+                          position: 'sticky',
+                          left: 50,
+                          backgroundColor: 'background.paper',
+                          zIndex: 4,
+                        }}
+                      >
+                        Student Name
+                      </TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        sx={{
+                          minWidth: 120,
+                          position: 'sticky',
+                          left: 250,
+                          backgroundColor: 'background.paper',
+                          zIndex: 4,
+                        }}
+                      >
+                        Student ID
+                      </TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        sx={{
+                          minWidth: 100,
+                          position: 'sticky',
+                          left: 370,
+                          backgroundColor: 'background.paper',
+                          zIndex: 4,
+                        }}
+                      >
+                        Group
+                      </TableCell>
+                      {assessmentColumns.map(assessment => (
+                        <TableCell
+                          key={assessment.assessmentId}
+                          align="center"
+                          sx={{ minWidth: 80 }}
+                        >
+                          {assessment.assessmentName} ({assessment.maxScore})
                         </TableCell>
                       ))}
-                      <TableCell align="center" sx={{ minWidth: 80, backgroundColor: 'background.paper' }}>Total Days</TableCell>
-                      <TableCell align="center" sx={{ minWidth: 80, backgroundColor: 'background.paper' }}>Present</TableCell>
-                      <TableCell align="center" sx={{ minWidth: 80, backgroundColor: 'background.paper' }}>Absent</TableCell>
-                      <TableCell align="center" sx={{ minWidth: 100, backgroundColor: 'background.paper' }}>Attendance %</TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        align="center"
+                        sx={{ minWidth: 80, backgroundColor: 'background.paper' }}
+                      >
+                        Total Days
+                      </TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        align="center"
+                        sx={{ minWidth: 80, backgroundColor: 'background.paper' }}
+                      >
+                        Present
+                      </TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        align="center"
+                        sx={{ minWidth: 80, backgroundColor: 'background.paper' }}
+                      >
+                        Absent
+                      </TableCell>
+                      <TableCell
+                        rowSpan={2}
+                        align="center"
+                        sx={{ minWidth: 100, backgroundColor: 'background.paper' }}
+                      >
+                        Attendance %
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      {assessmentColumns.map(assessment => (
+                        <TableCell
+                          key={`date-${assessment.assessmentId}`}
+                          align="center"
+                          sx={{ minWidth: 80 }}
+                        >
+                          {dayjs(assessment.date).format('MMM DD')}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {reportData.map((student, index) => (
                       <TableRow key={student.studentId} hover>
-                        <TableCell sx={{ position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 2 }}>{index + 1}</TableCell>
-                        <TableCell sx={{ position: 'sticky', left: 50, backgroundColor: 'background.paper', zIndex: 2 }}>{student.studentName}</TableCell>
-                        <TableCell sx={{ position: 'sticky', left: 250, backgroundColor: 'background.paper', zIndex: 2 }}>{student.studentIdNumber}</TableCell>
-                        <TableCell sx={{ position: 'sticky', left: 370, backgroundColor: 'background.paper', zIndex: 2 }}>{student.groupName}</TableCell>
-                        {uniqueDates.map(date => (
+                        <TableCell
+                          sx={{
+                            position: 'sticky',
+                            left: 0,
+                            backgroundColor: 'background.paper',
+                            zIndex: 2,
+                          }}
+                        >
+                          {index + 1}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            position: 'sticky',
+                            left: 50,
+                            backgroundColor: 'background.paper',
+                            zIndex: 2,
+                          }}
+                        >
+                          {student.studentName}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            position: 'sticky',
+                            left: 250,
+                            backgroundColor: 'background.paper',
+                            zIndex: 2,
+                          }}
+                        >
+                          {student.studentIdNumber}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            position: 'sticky',
+                            left: 370,
+                            backgroundColor: 'background.paper',
+                            zIndex: 2,
+                          }}
+                        >
+                          {student.groupName}
+                        </TableCell>
+                        {assessmentColumns.map(assessment => (
                           <TableCell
-                            key={date}
+                            key={assessment.assessmentId}
                             align="center"
                             sx={{
-                              backgroundColor: getCellColor(student.attendanceByDate[date]),
-                              fontWeight: 'bold'
+                              backgroundColor: getCellColor(
+                                student.attendanceByAssessment[assessment.assessmentId]
+                              ),
+                              fontWeight: 'bold',
                             }}
                           >
-                            {student.attendanceByDate[date]}
+                            {student.attendanceByAssessment[assessment.assessmentId]}
                           </TableCell>
                         ))}
                         <TableCell align="center">{student.totalDays}</TableCell>
