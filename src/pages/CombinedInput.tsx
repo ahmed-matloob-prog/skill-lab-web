@@ -138,11 +138,13 @@ const CombinedInput: React.FC = () => {
   });
 
   // Filter groups based on user permissions
-  const accessibleGroups = user?.role === 'admin' ? groups : 
+  const accessibleGroups = user?.role === 'admin' ? groups :
     groups.filter(group => user?.assignedGroups?.includes(group.id));
 
-  // Groups are available for all years, so no need to filter by year
-  const filteredGroups = accessibleGroups;
+  // Further filter groups by selected year
+  const filteredGroups = selectedYear === 'all'
+    ? accessibleGroups
+    : accessibleGroups.filter(group => group.year === selectedYear);
 
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
@@ -349,6 +351,16 @@ const CombinedInput: React.FC = () => {
     }
   };
 
+
+  // Reset group selection when year changes
+  useEffect(() => {
+    if (selectedGroup !== 'all') {
+      const selectedGroupData = groups.find(g => g.id === selectedGroup);
+      if (selectedGroupData && selectedYear !== 'all' && selectedGroupData.year !== selectedYear) {
+        setSelectedGroup('all');
+      }
+    }
+  }, [selectedYear, selectedGroup, groups]);
 
   useEffect(() => {
     loadAttendanceForDate(selectedDate);

@@ -109,14 +109,10 @@ const AttendanceReport: React.FC = () => {
   const accessibleGroups = user?.role === 'admin' ? groups :
     groups.filter(group => user?.assignedGroups?.includes(group.id));
 
-  logger.info(`Total groups: ${groups.length}, Accessible groups: ${accessibleGroups.length}, User role: ${user?.role}`);
-
   // Further filter groups by selected year
   const filteredGroupsByYear = selectedYear === 'all'
     ? accessibleGroups
     : accessibleGroups.filter(group => group.year === selectedYear);
-
-  logger.info(`Selected year: ${selectedYear}, Filtered groups by year: ${filteredGroupsByYear.length}`);
 
   // Get attendance value for a specific student and assessment
   const getAttendanceValue = (
@@ -217,7 +213,6 @@ const AttendanceReport: React.FC = () => {
         week: a.week,
       }));
 
-      logger.info(`Filtered assessments: ${filteredAssessments.length} total (with duplicates), ${uniqueAssessments.length} unique, creating ${columns.length} columns`);
       setAssessmentColumns(columns);
 
       // Step 6: Filter students based on permissions and selections
@@ -271,8 +266,6 @@ const AttendanceReport: React.FC = () => {
 
         const attendanceRate = totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 0;
         const group = groups.find(g => g.id === student.groupId);
-
-        logger.info(`Student ${student.name}: ${columns.length} assessments, ${totalDays} total days with records`);
 
         return {
           studentId: student.id,
