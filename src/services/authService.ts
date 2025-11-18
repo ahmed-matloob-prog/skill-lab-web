@@ -456,7 +456,7 @@ class AuthService {
   async updateUser(userId: string, updates: Partial<User>): Promise<User> {
     const users = await this.getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
-    
+
     if (userIndex === -1) {
       throw new Error('User not found');
     }
@@ -467,8 +467,21 @@ class AuthService {
       updatedAt: new Date().toISOString(),
     };
 
+    // Update in localStorage immediately
     const updatedUsers = users.map(u => u.id === userId ? updatedUser : u);
-    await this.saveUsers(updatedUsers);
+    localStorage.setItem(this.usersKey, JSON.stringify(updatedUsers));
+
+    // Update in Firebase (OPTIMIZED - only update this specific user, not all users)
+    if (FirebaseUserService.isConfigured()) {
+      try {
+        logger.log('AuthService: Updating single user in Firebase:', updatedUser.username);
+        await FirebaseUserService.updateUser(userId, updatedUser);
+        logger.log('AuthService: User updated successfully in Firebase');
+      } catch (error) {
+        logger.error('Firebase: Error updating user, data saved to localStorage:', error);
+        // Data is already saved to localStorage, so operation still succeeds
+      }
+    }
 
     // Update current user if it's the same user
     if (this.currentUser && this.currentUser.id === userId) {
