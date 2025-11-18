@@ -180,8 +180,23 @@ const AttendanceReport: React.FC = () => {
       // Step 3: Sort by date (chronological)
       filteredAssessments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      // Step 4: Create assessment columns
-      const columns: AssessmentColumn[] = filteredAssessments.map(a => ({
+      // Step 4: Deduplicate assessments by unique characteristics
+      // Since each assessment is saved per student, we need to group by name+date+type+group
+      const uniqueAssessmentsMap = new Map<string, typeof filteredAssessments[0]>();
+      filteredAssessments.forEach(a => {
+        // Create a unique key based on assessment characteristics
+        const key = `${a.assessmentName}|${a.date}|${a.assessmentType}|${a.groupId}|${a.trainerId}`;
+
+        // Only keep the first occurrence of each unique assessment
+        if (!uniqueAssessmentsMap.has(key)) {
+          uniqueAssessmentsMap.set(key, a);
+        }
+      });
+
+      const uniqueAssessments = Array.from(uniqueAssessmentsMap.values());
+
+      // Step 5: Create assessment columns from unique assessments
+      const columns: AssessmentColumn[] = uniqueAssessments.map(a => ({
         assessmentId: a.id,
         assessmentName: a.assessmentName,
         assessmentType: a.assessmentType,
@@ -193,10 +208,10 @@ const AttendanceReport: React.FC = () => {
         week: a.week,
       }));
 
-      logger.info(`Filtered assessments: ${filteredAssessments.length} total, creating ${columns.length} columns`);
+      logger.info(`Filtered assessments: ${filteredAssessments.length} total (with duplicates), ${uniqueAssessments.length} unique, creating ${columns.length} columns`);
       setAssessmentColumns(columns);
 
-      // Step 5: Filter students based on permissions and selections
+      // Step 6: Filter students based on permissions and selections
       let filteredStudents = students.filter(student => {
         // For trainers, only show students from their assigned groups AND assigned years
         if (user?.role === 'trainer') {
@@ -219,7 +234,7 @@ const AttendanceReport: React.FC = () => {
         return true;
       });
 
-          // Step 6: Build attendance grid data
+      // Step 7: Build attendance grid data
       const gridData: AttendanceGridData[] = filteredStudents.map(student => {
         const attendanceByAssessment: { [key: string]: 1 | 0 | '-' } = {};
         let totalDays = 0;
@@ -266,7 +281,7 @@ const AttendanceReport: React.FC = () => {
 
       setReportData(gridData);
 
-      // Step 7: Calculate summary statistics
+      // Step 8: Calculate summary statistics
       const totalStudents = gridData.length;
       const totalAssessments = columns.length;
       const avgAttendanceRate =
