@@ -193,6 +193,7 @@ const AttendanceReport: React.FC = () => {
         week: a.week,
       }));
 
+      logger.info(`Filtered assessments: ${filteredAssessments.length} total, creating ${columns.length} columns`);
       setAssessmentColumns(columns);
 
       // Step 5: Filter students based on permissions and selections
@@ -218,13 +219,14 @@ const AttendanceReport: React.FC = () => {
         return true;
       });
 
-      // Step 6: Build attendance grid data
+          // Step 6: Build attendance grid data
       const gridData: AttendanceGridData[] = filteredStudents.map(student => {
         const attendanceByAssessment: { [key: string]: 1 | 0 | '-' } = {};
         let totalDays = 0;
         let presentCount = 0;
         let absentCount = 0;
 
+        // IMPORTANT: Only iterate over the FILTERED columns
         columns.forEach(assessment => {
           const value = getAttendanceValue(
             student.id,
@@ -245,6 +247,8 @@ const AttendanceReport: React.FC = () => {
 
         const attendanceRate = totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 0;
         const group = groups.find(g => g.id === student.groupId);
+
+        logger.info(`Student ${student.name}: ${columns.length} assessments, ${totalDays} total days with records`);
 
         return {
           studentId: student.id,
