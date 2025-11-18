@@ -105,9 +105,18 @@ const AttendanceReport: React.FC = () => {
     return [];
   };
 
-  // Filter groups based on user permissions
+  // Filter groups based on user permissions and selected year
   const accessibleGroups = user?.role === 'admin' ? groups :
     groups.filter(group => user?.assignedGroups?.includes(group.id));
+
+  logger.info(`Total groups: ${groups.length}, Accessible groups: ${accessibleGroups.length}, User role: ${user?.role}`);
+
+  // Further filter groups by selected year
+  const filteredGroupsByYear = selectedYear === 'all'
+    ? accessibleGroups
+    : accessibleGroups.filter(group => group.year === selectedYear);
+
+  logger.info(`Selected year: ${selectedYear}, Filtered groups by year: ${filteredGroupsByYear.length}`);
 
   // Get attendance value for a specific student and assessment
   const getAttendanceValue = (
@@ -346,6 +355,17 @@ const AttendanceReport: React.FC = () => {
     return '#f5f5f5'; // Light gray
   };
 
+  // Reset group selection when year changes
+  useEffect(() => {
+    // If the currently selected group doesn't belong to the selected year, reset to 'all'
+    if (selectedGroup !== 'all') {
+      const selectedGroupData = groups.find(g => g.id === selectedGroup);
+      if (selectedGroupData && selectedYear !== 'all' && selectedGroupData.year !== selectedYear) {
+        setSelectedGroup('all');
+      }
+    }
+  }, [selectedYear, selectedGroup, groups]);
+
   // Auto-generate report on load
   useEffect(() => {
     if (!loading) {
@@ -420,7 +440,7 @@ const AttendanceReport: React.FC = () => {
                     onChange={(e) => setSelectedGroup(e.target.value)}
                   >
                     <MenuItem value="all">All Groups</MenuItem>
-                    {accessibleGroups.map(group => (
+                    {filteredGroupsByYear.map(group => (
                       <MenuItem key={group.id} value={group.id}>
                         {group.name}
                       </MenuItem>
