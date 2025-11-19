@@ -369,6 +369,12 @@ class DatabaseService {
     }
   }
 
+  async deleteAttendanceRecord(id: string): Promise<void> {
+    const attendance = await this.getAttendanceRecords();
+    const filteredAttendance = attendance.filter(r => r.id !== id);
+    localStorage.setItem(this.attendanceKey, JSON.stringify(filteredAttendance));
+  }
+
   async deleteAttendanceByStudent(studentId: string): Promise<void> {
     const attendance = await this.getAttendanceRecords();
     const filteredAttendance = attendance.filter(r => r.studentId !== studentId);

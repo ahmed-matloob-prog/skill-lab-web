@@ -22,10 +22,11 @@ import {
   DialogActions,
   DialogContentText,
 } from '@mui/material';
-import { Build, Warning, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
+import { Build, Warning, CheckCircle, Error as ErrorIcon, DeleteSweep } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import DatabaseService from '../services/databaseService';
-import { Student } from '../types';
+import AuthService from '../services/authService';
+import { Student, User } from '../types';
 import { logger } from '../utils/logger';
 
 interface RepairIssue {
@@ -38,7 +39,7 @@ interface RepairIssue {
 }
 
 const DataRepairTool: React.FC = () => {
-  const { students, groups, updateStudent } = useDatabase();
+  const { students, groups, updateStudent, attendance, assessments } = useDatabase();
   const [issues, setIssues] = useState<RepairIssue[]>([]);
   const [scanning, setScanning] = useState(false);
   const [repairing, setRepairing] = useState(false);
@@ -46,6 +47,13 @@ const DataRepairTool: React.FC = () => {
   const [scanComplete, setScanComplete] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [repairResult, setRepairResult] = useState<{ success: number; failed: number } | null>(null);
+
+  // Orphaned data cleanup states
+  const [orphanedDataCount, setOrphanedDataCount] = useState({ attendance: 0, assessments: 0 });
+  const [cleaningOrphaned, setCleaningOrphaned] = useState(false);
+  const [orphanedCleanupComplete, setOrphanedCleanupComplete] = useState(false);
+  const [orphanedCleanupResult, setOrphanedCleanupResult] = useState<{ deleted: number } | null>(null);
+  const [confirmOrphanedDialogOpen, setConfirmOrphanedDialogOpen] = useState(false);
 
   // Scan for issues
   const scanForIssues = async () => {
@@ -173,6 +181,68 @@ const DataRepairTool: React.FC = () => {
         return 'default';
     }
   };
+
+  // Scan for orphaned data (attendance/assessments for deleted trainers)
+  const scanForOrphanedData = async () => {
+    try {
+      const users = await AuthService.getAllUsers();
+      const userIds = new Set(users.map(u => u.id));
+
+      const orphanedAttendance = attendance.filter(a => !userIds.has(a.trainerId));
+      const orphanedAssessments = assessments.filter(a => !userIds.has(a.trainerId));
+
+      setOrphanedDataCount({
+        attendance: orphanedAttendance.length,
+        assessments: orphanedAssessments.length
+      });
+    } catch (error) {
+      logger.error('Error scanning for orphaned data:', error);
+    }
+  };
+
+  // Clean up orphaned data
+  const cleanOrphanedData = async () => {
+    setCleaningOrphaned(true);
+    setOrphanedCleanupComplete(false);
+    setOrphanedCleanupResult(null);
+
+    try {
+      const users = await AuthService.getAllUsers();
+      const userIds = new Set(users.map(u => u.id));
+
+      let deletedCount = 0;
+
+      // Delete orphaned attendance records
+      const orphanedAttendance = attendance.filter(a => !userIds.has(a.trainerId));
+      for (const record of orphanedAttendance) {
+        await DatabaseService.deleteAttendanceRecord(record.id);
+        deletedCount++;
+      }
+
+      // Delete orphaned assessment records
+      const orphanedAssessments = assessments.filter(a => !userIds.has(a.trainerId));
+      for (const record of orphanedAssessments) {
+        await DatabaseService.deleteAssessmentRecord(record.id);
+        deletedCount++;
+      }
+
+      setOrphanedCleanupResult({ deleted: deletedCount });
+      setOrphanedCleanupComplete(true);
+      setConfirmOrphanedDialogOpen(false);
+
+      // Rescan after cleanup
+      await scanForOrphanedData();
+    } catch (error) {
+      logger.error('Error cleaning orphaned data:', error);
+    } finally {
+      setCleaningOrphaned(false);
+    }
+  };
+
+  // Scan for orphaned data on mount
+  useEffect(() => {
+    scanForOrphanedData();
+  }, [attendance, assessments]);
 
   return (
     <Box>
@@ -381,6 +451,155 @@ const DataRepairTool: React.FC = () => {
             autoFocus
           >
             Yes, Repair All
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Orphaned Data Cleanup Section */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <DeleteSweep sx={{ mr: 1, fontSize: 32, color: 'error.main' }} />
+            <Typography variant="h5" component="h2">
+              Orphaned Data Cleanup
+            </Typography>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary" paragraph>
+            This tool removes attendance and assessment records that belong to deleted trainers.
+            Orphaned records can occur when a trainer is permanently deleted from the system.
+          </Typography>
+
+          {/* Orphaned Data Summary */}
+          {orphanedDataCount.attendance + orphanedDataCount.assessments === 0 ? (
+            <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 3 }}>
+              <AlertTitle>No Orphaned Data</AlertTitle>
+              All attendance and assessment records are valid. No cleanup needed.
+            </Alert>
+          ) : (
+            <Alert severity="warning" icon={<Warning />} sx={{ mb: 3 }}>
+              <AlertTitle>Orphaned Data Detected</AlertTitle>
+              Found {orphanedDataCount.attendance} orphaned attendance record(s) and{' '}
+              {orphanedDataCount.assessments} orphaned assessment record(s) that belong to deleted trainers.
+            </Alert>
+          )}
+
+          {/* Cleanup Result */}
+          {orphanedCleanupComplete && orphanedCleanupResult && (
+            <Alert
+              severity="success"
+              sx={{ mb: 3 }}
+              onClose={() => setOrphanedCleanupComplete(false)}
+            >
+              <AlertTitle>Cleanup Complete</AlertTitle>
+              Successfully deleted {orphanedCleanupResult.deleted} orphaned record(s).
+            </Alert>
+          )}
+
+          {/* Action Buttons */}
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={scanForOrphanedData}
+              disabled={cleaningOrphaned}
+              startIcon={cleaningOrphaned ? <CircularProgress size={20} /> : undefined}
+            >
+              Rescan for Orphaned Data
+            </Button>
+
+            {orphanedDataCount.attendance + orphanedDataCount.assessments > 0 && (
+              <Button
+                variant="contained"
+                color="error"
+                onClick={() => setConfirmOrphanedDialogOpen(true)}
+                disabled={cleaningOrphaned}
+                startIcon={cleaningOrphaned ? <CircularProgress size={20} /> : <DeleteSweep />}
+              >
+                {cleaningOrphaned
+                  ? 'Cleaning...'
+                  : `Clean Up Orphaned Data (${orphanedDataCount.attendance + orphanedDataCount.assessments})`}
+              </Button>
+            )}
+          </Box>
+
+          {/* Orphaned Data Details */}
+          {orphanedDataCount.attendance + orphanedDataCount.assessments > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Details:</strong>
+              </Typography>
+              <Box component="ul" sx={{ mt: 1 }}>
+                {orphanedDataCount.attendance > 0 && (
+                  <li>
+                    <Typography variant="body2">
+                      {orphanedDataCount.attendance} attendance record(s) from deleted trainers
+                    </Typography>
+                  </li>
+                )}
+                {orphanedDataCount.assessments > 0 && (
+                  <li>
+                    <Typography variant="body2">
+                      {orphanedDataCount.assessments} assessment record(s) from deleted trainers
+                    </Typography>
+                  </li>
+                )}
+              </Box>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Orphaned Data Cleanup Confirmation Dialog */}
+      <Dialog
+        open={confirmOrphanedDialogOpen}
+        onClose={() => setConfirmOrphanedDialogOpen(false)}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Warning sx={{ mr: 1, color: 'error.main' }} />
+            Confirm Orphaned Data Cleanup
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete {orphanedDataCount.attendance + orphanedDataCount.assessments} orphaned record(s)
+            that belong to deleted trainers.
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 2, fontWeight: 'bold' }}>
+            Records to be deleted:
+          </DialogContentText>
+          <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+            {orphanedDataCount.attendance > 0 && (
+              <li>
+                <Typography variant="body2">
+                  {orphanedDataCount.attendance} attendance record(s)
+                </Typography>
+              </li>
+            )}
+            {orphanedDataCount.assessments > 0 && (
+              <li>
+                <Typography variant="body2">
+                  {orphanedDataCount.assessments} assessment record(s)
+                </Typography>
+              </li>
+            )}
+          </Box>
+          <DialogContentText color="error">
+            <strong>Warning:</strong> This action cannot be undone. Are you sure you want to proceed?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOrphanedDialogOpen(false)} disabled={cleaningOrphaned}>
+            Cancel
+          </Button>
+          <Button
+            onClick={cleanOrphanedData}
+            color="error"
+            variant="contained"
+            disabled={cleaningOrphaned}
+            autoFocus
+          >
+            Yes, Delete Orphaned Data
           </Button>
         </DialogActions>
       </Dialog>
