@@ -95,10 +95,19 @@ const TrainerReports: React.FC = () => {
       ...assessments.map(a => a.trainerId)
     ]));
 
-    return trainerIds.map(id => ({
-      id,
-      name: getTrainerName(id)
-    }));
+    return trainerIds.map(id => {
+      const trainer = users.find(u => u.id === id);
+      return {
+        id,
+        name: getTrainerName(id),
+        isActive: trainer?.isActive !== false // Show archived trainers but mark them
+      };
+    }).sort((a, b) => {
+      // Sort: active trainers first, then by name
+      if (a.isActive && !b.isActive) return -1;
+      if (!a.isActive && b.isActive) return 1;
+      return a.name.localeCompare(b.name);
+    });
   }, [users, attendance, assessments]);
 
   const generateGrandReport = () => {
@@ -411,7 +420,9 @@ const TrainerReports: React.FC = () => {
                 >
                   <MenuItem value="all">All Trainers</MenuItem>
                   {trainers.map(trainer => (
-                    <MenuItem key={trainer.id} value={trainer.id}>{trainer.name}</MenuItem>
+                    <MenuItem key={trainer.id} value={trainer.id}>
+                      {trainer.name}{!trainer.isActive && ' (Archived)'}
+                    </MenuItem>
                   ))}
                 </Select>
               </FormControl>

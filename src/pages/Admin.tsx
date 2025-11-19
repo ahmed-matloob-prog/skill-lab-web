@@ -44,6 +44,7 @@ import {
   Upload,
   MoreVert,
   FileDownload,
+  Restore,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -506,6 +507,30 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleArchiveUser = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (window.confirm(`Are you sure you want to archive "${user?.username}"? The user will not be able to login, but all their data will be preserved.`)) {
+      try {
+        await AuthService.archiveUser(userId);
+        loadUsers();
+      } catch (error) {
+        setError('Failed to archive user');
+      }
+    }
+  };
+
+  const handleRestoreUser = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (window.confirm(`Restore "${user?.username}"? The user will be able to login again.`)) {
+      try {
+        await AuthService.restoreUser(userId);
+        loadUsers();
+      } catch (error) {
+        setError('Failed to restore user');
+      }
+    }
+  };
+
   const handleDeleteUser = async (userId: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
@@ -846,13 +871,25 @@ const Admin: React.FC = () => {
                       >
                         <Edit />
                       </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteUser(user.id)}
-                        color="error"
-                      >
-                        <Delete />
-                      </IconButton>
+                      {user.isActive ? (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleArchiveUser(user.id)}
+                          color="warning"
+                          title="Archive User"
+                        >
+                          <Delete />
+                        </IconButton>
+                      ) : (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRestoreUser(user.id)}
+                          color="success"
+                          title="Restore User"
+                        >
+                          <Restore />
+                        </IconButton>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

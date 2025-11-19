@@ -450,10 +450,43 @@ class AuthService {
     return updatedUser;
   }
 
+  async archiveUser(userId: string): Promise<void> {
+    const users = await this.getUsers();
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Don't allow archiving the admin user
+    if (user.role === USER_ROLES.ADMIN && user.username === DEFAULT_CREDENTIALS.ADMIN.USERNAME) {
+      throw new Error('Cannot archive the admin user');
+    }
+
+    // Set user as inactive
+    await this.updateUser(userId, { isActive: false });
+
+    logger.log('User archived:', user.username);
+  }
+
+  async restoreUser(userId: string): Promise<void> {
+    const users = await this.getUsers();
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Set user as active
+    await this.updateUser(userId, { isActive: true });
+
+    logger.log('User restored:', user.username);
+  }
+
   async deleteUser(userId: string): Promise<void> {
     const users = await this.getUsers();
     const user = users.find(u => u.id === userId);
-    
+
     if (!user) {
       throw new Error('User not found');
     }
@@ -491,7 +524,7 @@ class AuthService {
       }
     });
     await this.savePasswords(passwords);
-    
+
     // Also delete from Firebase
     if (FirebasePasswordService.isConfigured()) {
       try {
