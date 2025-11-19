@@ -88,16 +88,18 @@ const TrainerReports: React.FC = () => {
   };
 
   // Get all unique trainer IDs from attendance and assessments
-  const trainerIds = Array.from(new Set([
-    ...attendance.map(a => a.trainerId),
-    ...assessments.map(a => a.trainerId)
-  ]));
+  // Recalculate when users, attendance, or assessments change
+  const trainers = React.useMemo(() => {
+    const trainerIds = Array.from(new Set([
+      ...attendance.map(a => a.trainerId),
+      ...assessments.map(a => a.trainerId)
+    ]));
 
-  // Create trainers list with proper names
-  const trainers = trainerIds.map(id => ({
-    id,
-    name: getTrainerName(id)
-  }));
+    return trainerIds.map(id => ({
+      id,
+      name: getTrainerName(id)
+    }));
+  }, [users, attendance, assessments]);
 
   const generateGrandReport = () => {
     setLoadingStats(true);
