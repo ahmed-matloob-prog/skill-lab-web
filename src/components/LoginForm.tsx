@@ -94,7 +94,7 @@ const LoginForm: React.FC = () => {
           <Box sx={{ textAlign: 'center', mb: 3 }}>
             <LoginIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
             <Typography variant="h4" component="h1" gutterBottom>
-              Student Attendance
+              Kerbala Med Skill Lab
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Sign in to continue
@@ -163,7 +163,7 @@ const LoginForm: React.FC = () => {
                 System Information
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                <em>Student Attendance Management System</em><br />
+                <em>Kerbala Med Skill Lab - Attendance & Assessment System</em><br />
                 <em>Contact your system administrator for login credentials.</em>
               </Typography>
             </CardContent>

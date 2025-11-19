@@ -137,7 +137,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div>
       <Toolbar>
         <Typography variant="h6" noWrap component="div">
-          Student Attendance
+          Kerbala Med Skill Lab
         </Typography>
       </Toolbar>
       <Divider />
@@ -181,7 +181,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find(item => item.path === location.pathname)?.text || 'Student Attendance'}
+            {menuItems.find(item => item.path === location.pathname)?.text || 'Kerbala Med Skill Lab'}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {/* Sync Status Indicator */}
