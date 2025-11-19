@@ -164,7 +164,22 @@ const Admin: React.FC = () => {
       logger.log('Admin: Loading users from AuthService...');
       const usersData = await AuthService.getAllUsers();
       logger.log('Admin: Loaded', usersData.length, 'users:', usersData.map(u => u.username));
-      setUsers(usersData);
+
+      // Sort users: admin first, then active trainers, then archived trainers
+      const sortedUsers = usersData.sort((a, b) => {
+        // Admin always first
+        if (a.role === 'admin' && b.role !== 'admin') return -1;
+        if (a.role !== 'admin' && b.role === 'admin') return 1;
+
+        // Then sort by active status (active before archived)
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+
+        // Finally sort by username alphabetically
+        return a.username.localeCompare(b.username);
+      });
+
+      setUsers(sortedUsers);
     } catch (error) {
       logger.error('Admin: Error loading users:', error);
     } finally {
