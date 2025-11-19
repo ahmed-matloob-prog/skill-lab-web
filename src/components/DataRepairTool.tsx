@@ -39,7 +39,7 @@ interface RepairIssue {
 }
 
 const DataRepairTool: React.FC = () => {
-  const { students, groups, updateStudent, attendance, assessments } = useDatabase();
+  const { students, groups, updateStudent, attendance, assessments, refreshAttendance, refreshAssessments } = useDatabase();
   const [issues, setIssues] = useState<RepairIssue[]>([]);
   const [scanning, setScanning] = useState(false);
   const [repairing, setRepairing] = useState(false);
@@ -226,11 +226,15 @@ const DataRepairTool: React.FC = () => {
         deletedCount++;
       }
 
+      // Refresh data from localStorage to update UI
+      await refreshAttendance();
+      await refreshAssessments();
+
       setOrphanedCleanupResult({ deleted: deletedCount });
       setOrphanedCleanupComplete(true);
       setConfirmOrphanedDialogOpen(false);
 
-      // Rescan after cleanup
+      // Rescan after cleanup to verify
       await scanForOrphanedData();
     } catch (error) {
       logger.error('Error cleaning orphaned data:', error);
