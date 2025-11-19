@@ -72,7 +72,6 @@ const AttendanceReport: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedUnit, setSelectedUnit] = useState<string>('all');
-  const [selectedTrainer, setSelectedTrainer] = useState<string>('all');
 
   // Report data states
   const [reportData, setReportData] = useState<AttendanceGridData[]>([]);
@@ -166,7 +165,7 @@ const AttendanceReport: React.FC = () => {
         return true;
       });
 
-      // Step 2: Filter by user selections (year, group, unit, date range, trainer)
+      // Step 2: Filter by user selections (year, group, unit, date range)
       filteredAssessments = filteredAssessments.filter(a => {
         const assessmentDate = dayjs(a.date);
         const inDateRange =
@@ -177,7 +176,6 @@ const AttendanceReport: React.FC = () => {
         if (selectedYear !== 'all' && a.year !== selectedYear) return false;
         if (selectedGroup !== 'all' && a.groupId !== selectedGroup) return false;
         if (selectedUnit !== 'all' && a.unit !== selectedUnit) return false;
-        if (selectedTrainer !== 'all' && a.trainerId !== selectedTrainer) return false;
 
         return true;
       });
@@ -463,21 +461,6 @@ const AttendanceReport: React.FC = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              {user?.role === 'admin' && (
-                <Grid item xs={12} sm={6} md={3}>
-                  <FormControl fullWidth>
-                    <InputLabel>Trainer</InputLabel>
-                    <Select
-                      value={selectedTrainer}
-                      label="Trainer"
-                      onChange={(e) => setSelectedTrainer(e.target.value)}
-                    >
-                      <MenuItem value="all">All Trainers</MenuItem>
-                      {/* TODO: Add trainer list */}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              )}
               <Grid item xs={12} sm={6} md={3}>
                 <Button
                   variant="contained"
