@@ -106,40 +106,11 @@ class AuthService {
   }
 
   private async getPasswords(): Promise<{ [username: string]: string }> {
-    // Start with localStorage passwords (for default users and backwards compatibility)
+    // OPTIMIZED: Use localStorage only (already synced by AuthContext)
+    // No need to fetch from Firebase during login - it's already synced in background
     const localPasswords = localStorage.getItem(this.passwordsKey);
     const passwords = localPasswords ? JSON.parse(localPasswords) : {};
-    
-    // Merge with Firebase passwords if configured
-    if (FirebasePasswordService.isConfigured()) {
-      try {
-        // Get passwords from Firebase for each user
-        // Only fetch for non-production users (production users use hardcoded passwords)
-        const allUsers = await this.getUsers();
-        const productionUsernames = productionUsers.map(u => u.username.toLowerCase());
-        
-        for (const user of allUsers) {
-          const normalizedUsername = this.normalizeUsername(user.username);
-          // Skip production users - they use hardcoded passwords
-          if (productionUsernames.includes(normalizedUsername)) {
-            continue;
-          }
-          
-          const firebasePassword = await FirebasePasswordService.getPassword(normalizedUsername);
-          if (firebasePassword) {
-            passwords[normalizedUsername] = firebasePassword;
-            // Also store with original username if different
-            if (normalizedUsername !== user.username) {
-              passwords[user.username] = firebasePassword;
-            }
-          }
-        }
-        logger.log('Firebase: Merged passwords from Firebase with localStorage');
-      } catch (error) {
-        logger.error('Firebase: Error getting passwords, using localStorage only:', error);
-      }
-    }
-    
+
     return passwords;
   }
 
@@ -167,28 +138,8 @@ class AuthService {
   }
 
   private async getUsers(): Promise<User[]> {
-    // Try Firebase first if configured
-    if (FirebaseUserService.isConfigured()) {
-      try {
-        const firebaseUsers = await FirebaseUserService.getAllUsers();
-        // Merge with production users (default admin and trainers)
-        const allUsers = [...productionUsers];
-        
-        // Add Firebase users, avoiding duplicates
-        firebaseUsers.forEach(fbUser => {
-          if (!allUsers.find(u => u.username.toLowerCase() === fbUser.username.toLowerCase())) {
-            allUsers.push(fbUser);
-          }
-        });
-        
-        return allUsers;
-      } catch (error) {
-        logger.error('Firebase: Error getting users, falling back to localStorage:', error);
-        // Fallback to localStorage
-      }
-    }
-    
-    // Fallback to localStorage
+    // OPTIMIZED: Use localStorage only (already synced by AuthContext)
+    // No need to fetch from Firebase during login - it's already synced in background
     const users = localStorage.getItem(this.usersKey);
     return users ? JSON.parse(users) : productionUsers;
   }
@@ -312,9 +263,16 @@ class AuthService {
       lastLogin: new Date().toISOString(),
     };
 
-    // Update user in storage
+    // OPTIMIZED: Update only this specific user in localStorage (FAST!)
     const updatedUsers = users.map(u => u.id === user.id ? updatedUser : u);
-    await this.saveUsers(updatedUsers);
+    localStorage.setItem(this.usersKey, JSON.stringify(updatedUsers));
+
+    // Update in Firebase in BACKGROUND (non-blocking)
+    if (FirebaseUserService.isConfigured()) {
+      FirebaseUserService.updateUser(updatedUser.id, updatedUser).catch(error => {
+        logger.error('AuthService: Error updating user in Firebase (non-blocking):', error);
+      });
+    }
 
     // Set current user
     this.currentUser = updatedUser;

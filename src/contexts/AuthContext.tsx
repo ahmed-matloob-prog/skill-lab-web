@@ -36,61 +36,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Initialize authentication system
-   * 1. Sync users and passwords from Firebase to localStorage
-   * 2. Check if user is already authenticated
+   * 1. Check if user is already authenticated (FAST - localStorage only)
+   * 2. Sync users and passwords from Firebase in BACKGROUND (non-blocking)
    * 3. Subscribe to real-time user updates
    */
   const initializeAuth = async () => {
     try {
       logger.log('AuthContext: Initializing authentication...');
 
-      // Step 1: Sync users from Firebase to localStorage (critical for multi-device login)
+      // Step 1: Check authentication status IMMEDIATELY (localStorage only - FAST!)
+      await checkAuthStatus();
+
+      // Step 2: Sync from Firebase in BACKGROUND (non-blocking)
       if (FirebaseUserService.isConfigured()) {
-        logger.log('AuthContext: Syncing users from Firebase...');
+        logger.log('AuthContext: Starting background Firebase sync...');
 
-        // Fetch all users from Firebase
-        const firebaseUsers = await FirebaseUserService.getAllUsers();
-
-        if (firebaseUsers.length > 0) {
-          logger.log(`AuthContext: Found ${firebaseUsers.length} users in Firebase, syncing to localStorage`);
-
-          // Merge with existing localStorage users (preserve production users)
-          const localUsersJson = localStorage.getItem('users');
-          const localUsers: User[] = localUsersJson ? JSON.parse(localUsersJson) : [];
-
-          // Create a map of existing users by ID
-          const userMap = new Map<string, User>();
-          localUsers.forEach(user => userMap.set(user.id, user));
-
-          // Add/update Firebase users
-          firebaseUsers.forEach(user => userMap.set(user.id, user));
-
-          // Save merged users to localStorage
-          const mergedUsers = Array.from(userMap.values());
-          localStorage.setItem('users', JSON.stringify(mergedUsers));
-          logger.log(`AuthContext: Merged ${mergedUsers.length} total users to localStorage`);
-        } else {
-          logger.log('AuthContext: No users found in Firebase');
-        }
-
-        // Step 2: Sync passwords from Firebase to localStorage
-        logger.log('AuthContext: Syncing passwords from Firebase...');
-        const firebasePasswords = await FirebasePasswordService.getAllPasswords();
-
-        if (Object.keys(firebasePasswords).length > 0) {
-          logger.log(`AuthContext: Found ${Object.keys(firebasePasswords).length} passwords in Firebase`);
-
-          // Merge with existing localStorage passwords
-          const localPasswordsJson = localStorage.getItem('userPasswords');
-          const localPasswords = localPasswordsJson ? JSON.parse(localPasswordsJson) : {};
-
-          // Merge passwords (Firebase takes precedence for conflicts)
-          const mergedPasswords = { ...localPasswords, ...firebasePasswords };
-          localStorage.setItem('userPasswords', JSON.stringify(mergedPasswords));
-          logger.log(`AuthContext: Merged ${Object.keys(mergedPasswords).length} total passwords to localStorage`);
-        } else {
-          logger.log('AuthContext: No passwords found in Firebase');
-        }
+        // Run Firebase sync in background without blocking
+        syncFromFirebaseInBackground();
 
         // Step 3: Subscribe to real-time user updates
         logger.log('AuthContext: Setting up real-time user sync...');
@@ -113,13 +75,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logger.log('AuthContext: Firebase not configured, using localStorage only');
       }
 
-      // Step 4: Check authentication status
-      await checkAuthStatus();
-
     } catch (error) {
       logger.error('AuthContext: Error initializing auth:', error);
-      // Continue with auth check even if Firebase sync fails
-      await checkAuthStatus();
+    }
+  };
+
+  /**
+   * Sync users and passwords from Firebase in background (non-blocking)
+   */
+  const syncFromFirebaseInBackground = async () => {
+    try {
+      logger.log('AuthContext: Background sync starting...');
+
+      // Fetch users and passwords in PARALLEL (not sequential)
+      const [firebaseUsers, firebasePasswords] = await Promise.all([
+        FirebaseUserService.getAllUsers().catch(err => {
+          logger.error('AuthContext: Error fetching users:', err);
+          return [];
+        }),
+        FirebasePasswordService.getAllPasswords().catch(err => {
+          logger.error('AuthContext: Error fetching passwords:', err);
+          return {};
+        })
+      ]);
+
+      // Merge users
+      if (firebaseUsers.length > 0) {
+        logger.log(`AuthContext: Found ${firebaseUsers.length} users in Firebase, syncing to localStorage`);
+
+        const localUsersJson = localStorage.getItem('users');
+        const localUsers: User[] = localUsersJson ? JSON.parse(localUsersJson) : [];
+
+        const userMap = new Map<string, User>();
+        localUsers.forEach(user => userMap.set(user.id, user));
+        firebaseUsers.forEach(user => userMap.set(user.id, user));
+
+        const mergedUsers = Array.from(userMap.values());
+        localStorage.setItem('users', JSON.stringify(mergedUsers));
+        logger.log(`AuthContext: Merged ${mergedUsers.length} total users to localStorage`);
+      }
+
+      // Merge passwords
+      if (Object.keys(firebasePasswords).length > 0) {
+        logger.log(`AuthContext: Found ${Object.keys(firebasePasswords).length} passwords in Firebase`);
+
+        const localPasswordsJson = localStorage.getItem('userPasswords');
+        const localPasswords = localPasswordsJson ? JSON.parse(localPasswordsJson) : {};
+
+        const mergedPasswords = { ...localPasswords, ...firebasePasswords };
+        localStorage.setItem('userPasswords', JSON.stringify(mergedPasswords));
+        logger.log(`AuthContext: Merged ${Object.keys(mergedPasswords).length} total passwords to localStorage`);
+      }
+
+      logger.log('AuthContext: Background sync completed');
+    } catch (error) {
+      logger.error('AuthContext: Background sync error:', error);
     }
   };
 
