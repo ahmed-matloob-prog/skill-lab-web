@@ -229,6 +229,18 @@ const CombinedInput: React.FC = () => {
       return;
     }
 
+    // Validate Week is selected (mandatory)
+    if (selectedWeek === 'all') {
+      setError('Please select a Week number before saving');
+      return;
+    }
+
+    // Validate Unit is selected for Year 2/3
+    if ((selectedYear === 2 || selectedYear === 3) && selectedUnit === 'all') {
+      setError('Please select a Unit for Year 2/3 assessments');
+      return;
+    }
+
     setLoadingSave(true);
     setError(null);
 
@@ -287,8 +299,8 @@ const CombinedInput: React.FC = () => {
             date: dateString,
             year: student.year,
             groupId: student.groupId,
-            unit: student.unit,
-            week: selectedWeek !== 'all' ? selectedWeek as number : undefined,
+            unit: selectedUnit !== 'all' ? selectedUnit : undefined,
+            week: selectedWeek as number,
             trainerId: user?.id || '',
             synced: false,
           };
@@ -446,15 +458,15 @@ const CombinedInput: React.FC = () => {
             </Grid>
             <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
               <Grid item xs={12} sm={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Filter by Unit</InputLabel>
+                <FormControl fullWidth required={selectedYear === 2 || selectedYear === 3}>
+                  <InputLabel>{(selectedYear === 2 || selectedYear === 3) ? 'Unit *' : 'Filter by Unit'}</InputLabel>
                   <Select
                     value={selectedUnit}
-                    label="Filter by Unit"
+                    label={(selectedYear === 2 || selectedYear === 3) ? 'Unit *' : 'Filter by Unit'}
                     onChange={(e) => setSelectedUnit(e.target.value)}
                     disabled={selectedYear === 'all' || (selectedYear !== 2 && selectedYear !== 3)}
                   >
-                    <MenuItem value="all">All Units</MenuItem>
+                    <MenuItem value="all">-- Select Unit --</MenuItem>
                     {getUnitOptions(selectedYear as number).map(unit => (
                       <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>
                     ))}
@@ -462,14 +474,14 @@ const CombinedInput: React.FC = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Select Week</InputLabel>
+                <FormControl fullWidth required>
+                  <InputLabel>Week *</InputLabel>
                   <Select
                     value={selectedWeek}
-                    label="Select Week"
+                    label="Week *"
                     onChange={(e) => setSelectedWeek(e.target.value as number | 'all')}
                   >
-                    <MenuItem value="all">All Weeks</MenuItem>
+                    <MenuItem value="all">-- Select Week --</MenuItem>
                     {weekOptions.map(week => (
                       <MenuItem key={week.value} value={week.value}>{week.label}</MenuItem>
                     ))}
