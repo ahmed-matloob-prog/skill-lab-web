@@ -119,8 +119,13 @@ const AdminReport: React.FC = () => {
 
       const groupFilteredAttendance = selectedGroup !== 'all' ?
         filteredAttendance.filter(a => a.groupId === selectedGroup) : filteredAttendance;
-      const groupFilteredAssessments = selectedGroup !== 'all' ?
+      let groupFilteredAssessments = selectedGroup !== 'all' ?
         filteredAssessments.filter(a => a.groupId === selectedGroup) : filteredAssessments;
+
+      // Filter assessments by unit if selected
+      if (selectedUnit) {
+        groupFilteredAssessments = groupFilteredAssessments.filter(a => a.unit === selectedUnit);
+      }
 
       // Calculate summary statistics
       const totalStudents = filteredStudents.length;
@@ -173,6 +178,7 @@ const AdminReport: React.FC = () => {
       setUniqueAssessments(sortedAssessments);
 
       // Generate summary report data
+      // IMPORTANT: Absent students are counted as 0% for missed assessments
       const reportData = filteredStudents.map(student => {
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
@@ -185,8 +191,39 @@ const AdminReport: React.FC = () => {
         const attendanceRate = attendanceCount > 0 ?
           Math.round((presentCount / attendanceCount) * 100) : 0;
 
-        const totalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
-        const totalMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+        // Calculate score including 0 for absent days
+        let totalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
+        let totalMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+        let totalAssessmentCount = studentAssessments.length;
+
+        // Find unique assessment sessions (by date + name + type)
+        const allAssessmentSessions = new Map<string, { date: string; maxScore: number }>();
+        groupFilteredAssessments.forEach(a => {
+          const key = `${a.date}_${a.assessmentName}_${a.assessmentType}`;
+          if (!allAssessmentSessions.has(key)) {
+            allAssessmentSessions.set(key, { date: a.date, maxScore: a.maxScore });
+          }
+        });
+
+        // Check for assessments the student missed due to absence
+        allAssessmentSessions.forEach((session, key) => {
+          const hasAssessment = studentAssessments.some(
+            a => `${a.date}_${a.assessmentName}_${a.assessmentType}` === key
+          );
+          if (!hasAssessment) {
+            // Check if student was absent on this date
+            const wasAbsent = studentAttendance.some(
+              a => a.date === session.date && a.status === 'absent'
+            );
+            if (wasAbsent) {
+              // Count as 0 score for this assessment
+              totalScore += 0;
+              totalMaxScore += session.maxScore;
+              totalAssessmentCount++;
+            }
+          }
+        });
+
         const studentAverageScore = totalMaxScore > 0 ?
           Math.round((totalScore / totalMaxScore) * 100) : 0;
 
@@ -198,7 +235,7 @@ const AdminReport: React.FC = () => {
           group: getGroupName(student.groupId),
           attendanceRate,
           averageScore: studentAverageScore,
-          totalAssessments: studentAssessments.length,
+          totalAssessments: totalAssessmentCount,
           totalAttendance: attendanceCount,
         };
       });
@@ -206,6 +243,7 @@ const AdminReport: React.FC = () => {
       setReportData(reportData);
 
       // Generate detailed report data with individual assessment scores
+      // IMPORTANT: Absent students are shown with 0 score and marked as absent
       const detailedData = filteredStudents.map((student, index) => {
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
@@ -218,13 +256,10 @@ const AdminReport: React.FC = () => {
         const attendanceRate = attendanceCount > 0 ?
           Math.round((presentCount / attendanceCount) * 100) : 0;
 
-        const totalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
-        const totalMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
-        const studentAverageScore = totalMaxScore > 0 ?
-          Math.round((totalScore / totalMaxScore) * 100) : 0;
-
         // Create a map of assessment scores for this student
-        const scoresMap: { [key: string]: { score: number; maxScore: number } } = {};
+        const scoresMap: { [key: string]: { score: number; maxScore: number; isAbsent?: boolean } } = {};
+
+        // First, add all assessments the student has scores for
         studentAssessments.forEach(assessment => {
           const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
           scoresMap[key] = {
@@ -232,6 +267,34 @@ const AdminReport: React.FC = () => {
             maxScore: assessment.maxScore,
           };
         });
+
+        // Then, check for assessments missed due to absence and add as 0
+        sortedAssessments.forEach(assessment => {
+          const key = assessment.key;
+          if (!scoresMap[key]) {
+            // Check if student was absent on this date
+            const wasAbsent = studentAttendance.some(
+              a => a.date === assessment.date && a.status === 'absent'
+            );
+            if (wasAbsent) {
+              scoresMap[key] = {
+                score: 0,
+                maxScore: assessment.maxScore,
+                isAbsent: true,
+              };
+            }
+          }
+        });
+
+        // Calculate average including 0 for absent
+        let totalScore = 0;
+        let totalMaxScore = 0;
+        Object.values(scoresMap).forEach(s => {
+          totalScore += s.score;
+          totalMaxScore += s.maxScore;
+        });
+        const studentAverageScore = totalMaxScore > 0 ?
+          Math.round((totalScore / totalMaxScore) * 100) : 0;
 
         return {
           rowNumber: index + 1,
@@ -302,9 +365,11 @@ const AdminReport: React.FC = () => {
       setSortedWeeks(sortedWeeksList);
 
       // Calculate weekly scores for each student (simplified - one assessment per week)
+      // IMPORTANT: Absent students are counted as 0% in the average
       const weeklyData = filteredStudents.map((student, index) => {
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
-        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number } } = {};
+        const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
+        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean } } = {};
 
         sortedWeeksList.forEach(week => {
           // Find the single assessment for this week
@@ -317,10 +382,29 @@ const AdminReport: React.FC = () => {
               percentage,
               assessmentCount: 1 // Always 1 since each week has one assessment
             };
+          } else {
+            // Check if student was absent on this assessment date
+            // Get the reference assessment to find the date
+            const referenceAssessment = groupFilteredAssessments.find(a => a.week === week.weekNumber);
+            if (referenceAssessment) {
+              const assessmentDate = referenceAssessment.date;
+              const wasAbsent = studentAttendance.some(
+                a => a.date === assessmentDate && a.status === 'absent'
+              );
+
+              if (wasAbsent) {
+                // Absent students get 0% score
+                weeklyScores[week.weekNumber] = {
+                  percentage: 0,
+                  assessmentCount: 1,
+                  isAbsent: true
+                };
+              }
+            }
           }
         });
 
-        // Calculate annual average
+        // Calculate annual average (includes 0% for absent students)
         const allPercentages = Object.values(weeklyScores).map(w => w.percentage);
         const annualAverage = allPercentages.length > 0
           ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)

@@ -109,6 +109,8 @@ const AttendanceAssessment: React.FC = () => {
     type: 'exam' as 'exam' | 'quiz' | 'assignment' | 'project' | 'presentation',
     maxScore: 100,
     date: dayjs(),
+    unit: '',
+    week: '' as string | number,
   });
   const [scores, setScores] = useState<{[studentId: string]: string}>({});
   const [loadingSave, setLoadingSave] = useState(false);
@@ -122,6 +124,54 @@ const AttendanceAssessment: React.FC = () => {
     { value: 'project', label: 'Project' },
     { value: 'presentation', label: 'Presentation' },
   ];
+
+  // Unit options based on year
+  const getUnitOptions = (year: number | 'all') => {
+    if (year === 2) {
+      return [
+        { value: 'MSK', label: 'MSK' },
+        { value: 'HEM', label: 'HEM' },
+        { value: 'CVS', label: 'CVS' },
+        { value: 'Resp', label: 'Resp' },
+      ];
+    } else if (year === 3) {
+      return [
+        { value: 'GIT', label: 'GIT' },
+        { value: 'GUT', label: 'GUT' },
+        { value: 'Neuro', label: 'Neuro' },
+        { value: 'END', label: 'END' },
+      ];
+    }
+    return [];
+  };
+
+  // Week options (1-12)
+  const weekOptions = Array.from({ length: 12 }, (_, i) => ({
+    value: i + 1,
+    label: `Week ${i + 1}`,
+  }));
+
+  // Get selected group's year for unit options
+  const getSelectedGroupYear = (): number | 'all' => {
+    if (selectedGroup !== 'all') {
+      const group = groups.find(g => g.id === selectedGroup);
+      return group?.year || 'all';
+    }
+    return selectedYear;
+  };
+
+  // Auto-fill unit from group when group changes
+  useEffect(() => {
+    if (selectedGroup !== 'all') {
+      const group = groups.find(g => g.id === selectedGroup);
+      if (group?.currentUnit) {
+        setAssessmentForm(prev => ({ ...prev, unit: group.currentUnit || '' }));
+      } else {
+        // Clear unit if group has no currentUnit set
+        setAssessmentForm(prev => ({ ...prev, unit: '' }));
+      }
+    }
+  }, [selectedGroup, groups]);
 
   // Filter students based on user permissions and selected filters
   const filteredStudents = students.filter(student => {
@@ -272,6 +322,22 @@ const AttendanceAssessment: React.FC = () => {
       return;
     }
 
+    // Get the year of selected students to check if unit/week is required
+    const groupYear = getSelectedGroupYear();
+    const requiresUnitWeek = groupYear === 2 || groupYear === 3;
+
+    // Validate unit for Year 2/3
+    if (requiresUnitWeek && !assessmentForm.unit) {
+      setError('Please select a Unit for Year 2/3 assessments');
+      return;
+    }
+
+    // Validate week (mandatory for all years)
+    if (!assessmentForm.week) {
+      setError('Please select a Week number');
+      return;
+    }
+
     const studentsWithScores = Object.keys(scores).filter(studentId => {
       const score = scores[studentId];
       return score && score.trim() !== '';
@@ -287,7 +353,7 @@ const AttendanceAssessment: React.FC = () => {
 
     try {
       let successCount = 0;
-      
+
       for (const studentId of studentsWithScores) {
         const score = parseInt(scores[studentId]);
         if (isNaN(score) || score < 0 || score > maxScoreNum) {
@@ -310,6 +376,8 @@ const AttendanceAssessment: React.FC = () => {
           groupId: student.groupId,
           trainerId: user?.id || '',
           synced: false,
+          unit: assessmentForm.unit || undefined,
+          week: typeof assessmentForm.week === 'number' ? assessmentForm.week : parseInt(assessmentForm.week as string) || undefined,
         };
 
         await addAssessmentRecord(assessmentData);
@@ -318,14 +386,18 @@ const AttendanceAssessment: React.FC = () => {
 
       setError(null);
       setScores({});
+      // Keep unit (auto-filled from group) but reset other fields
+      const currentGroup = groups.find(g => g.id === selectedGroup);
       setAssessmentForm({
         name: '',
         type: 'exam',
         maxScore: 100,
         date: dayjs(),
+        unit: currentGroup?.currentUnit || '',
+        week: '',
       });
       await loadSavedAssessments();
-      
+
       alert(`Assessment scores saved successfully! (${successCount} records)`);
     } catch (error) {
       setError('Failed to save assessment scores');
@@ -670,7 +742,7 @@ const AttendanceAssessment: React.FC = () => {
                     onChange={(e) => setAssessmentForm({ ...assessmentForm, maxScore: parseInt(e.target.value) || 100 })}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} sm={3}>
                   <DatePicker
                     label="Date"
                     value={assessmentForm.date}
@@ -678,7 +750,38 @@ const AttendanceAssessment: React.FC = () => {
                     renderInput={(params) => <TextField {...params} fullWidth />}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} sm={3}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Week *</InputLabel>
+                    <Select
+                      value={assessmentForm.week}
+                      label="Week *"
+                      onChange={(e) => setAssessmentForm({ ...assessmentForm, week: e.target.value as number })}
+                    >
+                      {weekOptions.map(week => (
+                        <MenuItem key={week.value} value={week.value}>{week.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                {/* Unit dropdown - only show for Year 2/3 */}
+                {(getSelectedGroupYear() === 2 || getSelectedGroupYear() === 3) && (
+                  <Grid item xs={12} sm={3}>
+                    <FormControl fullWidth required>
+                      <InputLabel>Unit *</InputLabel>
+                      <Select
+                        value={assessmentForm.unit}
+                        label="Unit *"
+                        onChange={(e) => setAssessmentForm({ ...assessmentForm, unit: e.target.value })}
+                      >
+                        {getUnitOptions(getSelectedGroupYear()).map(unit => (
+                          <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                )}
+                <Grid item xs={12} sm={getSelectedGroupYear() === 2 || getSelectedGroupYear() === 3 ? 3 : 6}>
                   <ToggleButtonGroup
                     value={showSavedScores}
                     exclusive

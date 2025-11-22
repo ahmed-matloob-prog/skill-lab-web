@@ -669,16 +669,26 @@ const Admin: React.FC = () => {
     }
 
     const groupCount = groups.filter(g => g.year === bulkUpdateYear).length;
-    const confirmMessage = `This will update the current unit to "${bulkUpdateUnit}" for all ${groupCount} groups in Year ${bulkUpdateYear}. Continue?`;
+    const isClearingUnit = bulkUpdateUnit === '__CLEAR__';
+    const confirmMessage = isClearingUnit
+      ? `This will CLEAR the current unit for all ${groupCount} groups in Year ${bulkUpdateYear}. Trainers will need to manually select a unit when entering assessments. Continue?`
+      : `This will update the current unit to "${bulkUpdateUnit}" for all ${groupCount} groups in Year ${bulkUpdateYear}. Continue?`;
 
     if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      const updatedCount = await bulkUpdateCurrentUnit(bulkUpdateYear, bulkUpdateUnit);
+      // Pass empty string to clear unit, otherwise pass the selected unit
+      const unitToSet = isClearingUnit ? '' : bulkUpdateUnit;
+      const updatedCount = await bulkUpdateCurrentUnit(bulkUpdateYear, unitToSet);
       setError(null);
-      alert(`Successfully updated ${updatedCount} groups to unit "${bulkUpdateUnit}"`);
+      if (isClearingUnit) {
+        alert(`Successfully cleared unit for ${updatedCount} groups`);
+      } else {
+        alert(`Successfully updated ${updatedCount} groups to unit "${bulkUpdateUnit}"`);
+      }
+      setBulkUpdateUnit(''); // Reset selection after update
     } catch (error) {
       setError('Failed to bulk update groups');
     }
@@ -982,7 +992,10 @@ const Admin: React.FC = () => {
                     displayEmpty
                   >
                     <MenuItem value="">
-                      <em>No unit selected</em>
+                      <em>-- Select an option --</em>
+                    </MenuItem>
+                    <MenuItem value="__CLEAR__">
+                      <em>Clear Unit (None)</em>
                     </MenuItem>
                     {bulkUpdateYear === 2 && [
                       <MenuItem key="MSK" value="MSK">MSK</MenuItem>,
