@@ -184,6 +184,12 @@ const AdminReport: React.FC = () => {
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
+        // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
+        const latestAssessment = studentAssessments.length > 0
+          ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+          : null;
+        const studentUnit = latestAssessment?.unit || student.unit || '';
+
         // Calculate student-specific stats
         const attendanceCount = studentAttendance.length;
         const presentCount = studentAttendance.filter(a =>
@@ -233,7 +239,7 @@ const AdminReport: React.FC = () => {
           studentName: student.name,
           studentId: student.studentId,
           year: student.year,
-          unit: student.unit || '',
+          unit: studentUnit,
           group: getGroupName(student.groupId),
           attendanceRate,
           averageScore: studentAverageScore,
@@ -249,6 +255,12 @@ const AdminReport: React.FC = () => {
       const detailedData = filteredStudents.map((student, index) => {
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
+
+        // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
+        const latestAssessment = studentAssessments.length > 0
+          ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+          : null;
+        const studentUnit = latestAssessment?.unit || student.unit || '-';
 
         // Calculate student-specific stats
         const attendanceCount = studentAttendance.length;
@@ -306,7 +318,7 @@ const AdminReport: React.FC = () => {
           studentName: student.name,
           studentId: student.studentId,
           year: student.year,
-          unit: student.unit || '-',
+          unit: studentUnit,
           groupName: getGroupName(student.groupId),
           assessmentScores: scoresMap,
           averageScore: studentAverageScore,
@@ -376,6 +388,12 @@ const AdminReport: React.FC = () => {
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
         const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean; isExcused?: boolean } } = {};
 
+        // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
+        const latestAssessment = studentAssessments.length > 0
+          ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+          : null;
+        const studentUnit = latestAssessment?.unit || student.unit || '-';
+
         sortedWeeksList.forEach(week => {
           // Find the single assessment for this week
           const weekAssessment = studentAssessments.find(a => a.week === week.weekNumber);
@@ -428,7 +446,7 @@ const AdminReport: React.FC = () => {
           rowNumber: index + 1,
           studentName: student.name,
           year: student.year,
-          unit: student.unit || '-',
+          unit: studentUnit,
           groupName: getGroupName(student.groupId),
           weeklyScores,
           annualAverage
@@ -525,6 +543,10 @@ const AdminReport: React.FC = () => {
   useEffect(() => {
     if (selectedYear !== 'all' || selectedGroup !== 'all') {
       generateGrandReport();
+      // For Year 2 and 3, default to weekly view (Week+Unit based)
+      if (selectedYear === 2 || selectedYear === 3) {
+        setViewMode('weekly');
+      }
     } else {
       setReportData([]);
       setSummaryStats({
