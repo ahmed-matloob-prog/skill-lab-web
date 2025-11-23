@@ -297,6 +297,12 @@ const CombinedInput: React.FC = () => {
         }
         // Save assessment score if provided (but not for absent students)
         else if (data.score && data.score.trim() !== '') {
+          // Require attendance selection when entering score
+          if (!data.attendance) {
+            setError(`Please select attendance (Present/Late) for ${student.name} before entering score`);
+            setLoadingSave(false);
+            return;
+          }
           // Prevent saving scores for absent students
           if (data.attendance === 'absent') {
             setError(`Cannot save assessment score for ${student.name} - student is marked as absent`);
@@ -341,11 +347,11 @@ const CombinedInput: React.FC = () => {
         maxScore: 100,
       });
 
-      // Clear scores
+      // Clear scores and attendance selections
       setStudentData(prev => {
         const newData = { ...prev };
         Object.keys(newData).forEach(key => {
-          newData[key] = { ...newData[key], score: '' };
+          newData[key] = { attendance: null, score: '' };
         });
         return newData;
       });
