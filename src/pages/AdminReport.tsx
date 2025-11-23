@@ -178,15 +178,19 @@ const AdminReport: React.FC = () => {
 
       setUniqueAssessments(sortedAssessments);
 
-      // Get unique assessment dates for filtering attendance
-      const assessmentDates = new Set(groupFilteredAssessments.map(a => a.date));
-
       // Generate summary report data
       // IMPORTANT: Absent students are counted as 0% for missed assessments
       const reportData = filteredStudents.map(student => {
-        // Only count attendance records on assessment dates
+        // Get assessment dates specific to this student's group
+        const studentGroupAssessmentDates = new Set(
+          groupFilteredAssessments
+            .filter(a => a.groupId === student.groupId)
+            .map(a => a.date)
+        );
+
+        // Only count attendance records on dates when student's group had assessments
         const studentAttendance = groupFilteredAttendance.filter(a =>
-          a.studentId === student.id && assessmentDates.has(a.date)
+          a.studentId === student.id && studentGroupAssessmentDates.has(a.date)
         );
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
@@ -214,14 +218,16 @@ const AdminReport: React.FC = () => {
         let totalMaxScore = scoredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
         let totalAssessmentCount = scoredAssessments.length;
 
-        // Find unique assessment sessions (by date + name + type)
+        // Find unique assessment sessions for this student's group (by date + name + type)
         const allAssessmentSessions = new Map<string, { date: string; maxScore: number }>();
-        groupFilteredAssessments.forEach(a => {
-          const key = `${a.date}_${a.assessmentName}_${a.assessmentType}`;
-          if (!allAssessmentSessions.has(key)) {
-            allAssessmentSessions.set(key, { date: a.date, maxScore: a.maxScore });
-          }
-        });
+        groupFilteredAssessments
+          .filter(a => a.groupId === student.groupId)
+          .forEach(a => {
+            const key = `${a.date}_${a.assessmentName}_${a.assessmentType}`;
+            if (!allAssessmentSessions.has(key)) {
+              allAssessmentSessions.set(key, { date: a.date, maxScore: a.maxScore });
+            }
+          });
 
         // Check for assessments the student missed due to absence
         allAssessmentSessions.forEach((session, key) => {
@@ -265,9 +271,16 @@ const AdminReport: React.FC = () => {
       // Generate detailed report data with individual assessment scores
       // IMPORTANT: Absent students are shown with 0 score and marked as absent
       const detailedData = filteredStudents.map((student, index) => {
-        // Only count attendance records on assessment dates
+        // Get assessment dates specific to this student's group
+        const studentGroupAssessmentDates = new Set(
+          groupFilteredAssessments
+            .filter(a => a.groupId === student.groupId)
+            .map(a => a.date)
+        );
+
+        // Only count attendance records on dates when student's group had assessments
         const studentAttendance = groupFilteredAttendance.filter(a =>
-          a.studentId === student.id && assessmentDates.has(a.date)
+          a.studentId === student.id && studentGroupAssessmentDates.has(a.date)
         );
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
@@ -303,22 +316,31 @@ const AdminReport: React.FC = () => {
         });
 
         // Then, check for assessments missed due to absence and add as 0
-        sortedAssessments.forEach(assessment => {
-          const key = assessment.key;
-          if (!scoresMap[key]) {
-            // Check if student was absent on this date
-            const wasAbsent = studentAttendance.some(
-              a => a.date === assessment.date && a.status === 'absent'
+        // Only check assessments that belong to this student's group
+        sortedAssessments
+          .filter(assessment => {
+            // Check if this assessment exists for student's group
+            return groupFilteredAssessments.some(
+              a => a.groupId === student.groupId &&
+                `${a.assessmentName}_${a.assessmentType}_${a.maxScore}_${a.date}` === assessment.key
             );
-            if (wasAbsent) {
-              scoresMap[key] = {
-                score: 0,
-                maxScore: assessment.maxScore,
-                isAbsent: true,
-              };
+          })
+          .forEach(assessment => {
+            const key = assessment.key;
+            if (!scoresMap[key]) {
+              // Check if student was absent on this date
+              const wasAbsent = studentAttendance.some(
+                a => a.date === assessment.date && a.status === 'absent'
+              );
+              if (wasAbsent) {
+                scoresMap[key] = {
+                  score: 0,
+                  maxScore: assessment.maxScore,
+                  isAbsent: true,
+                };
+              }
             }
-          }
-        });
+          });
 
         // Calculate average including 0 for absent (excluding excused)
         let totalScore = 0;
@@ -407,9 +429,17 @@ const AdminReport: React.FC = () => {
       // IMPORTANT: Absent students are counted as 0% in the average, excused are excluded
       const weeklyData = filteredStudents.map((student, index) => {
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
-        // Only count attendance records on assessment dates
+
+        // Get assessment dates specific to this student's group
+        const studentGroupAssessmentDates = new Set(
+          groupFilteredAssessments
+            .filter(a => a.groupId === student.groupId)
+            .map(a => a.date)
+        );
+
+        // Only count attendance records on dates when student's group had assessments
         const studentAttendance = groupFilteredAttendance.filter(a =>
-          a.studentId === student.id && assessmentDates.has(a.date)
+          a.studentId === student.id && studentGroupAssessmentDates.has(a.date)
         );
         const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean; isExcused?: boolean } } = {};
 

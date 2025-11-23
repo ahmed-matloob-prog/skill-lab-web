@@ -1635,7 +1635,10 @@ export const exportGrandReportDetailedToExcel = (
 
     // Final calculated columns - handle null averages
     rowData['Average'] = student.averageScore !== null ? student.averageScore : '-';
-    rowData['Attendance'] = student.attendancePercentage > 0 ? student.attendancePercentage : '-';
+    // Show attendance percentage (0 is valid, '-' only when undefined/null)
+    rowData['Attendance'] = student.attendancePercentage !== undefined && student.attendancePercentage !== null
+      ? student.attendancePercentage
+      : '-';
 
     detailedData.push(rowData);
   });
