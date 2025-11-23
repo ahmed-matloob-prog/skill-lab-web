@@ -234,8 +234,10 @@ const AdminReport: React.FC = () => {
           }
         });
 
-        const studentAverageScore = totalMaxScore > 0 ?
-          Math.round((totalScore / totalMaxScore) * 100) : 0;
+        // If student has no non-excused assessments, show null for average
+        const hasNonExcusedAssessment = totalAssessmentCount > 0;
+        const studentAverageScore = hasNonExcusedAssessment && totalMaxScore > 0 ?
+          Math.round((totalScore / totalMaxScore) * 100) : null;
 
         return {
           studentName: student.name,
@@ -308,14 +310,17 @@ const AdminReport: React.FC = () => {
         // Calculate average including 0 for absent (excluding excused)
         let totalScore = 0;
         let totalMaxScore = 0;
+        let hasNonExcusedAssessment = false;
         Object.values(scoresMap).forEach(s => {
           if (!s.isExcused) {  // Exclude excused from average
             totalScore += s.score;
             totalMaxScore += s.maxScore;
+            hasNonExcusedAssessment = true;
           }
         });
-        const studentAverageScore = totalMaxScore > 0 ?
-          Math.round((totalScore / totalMaxScore) * 100) : 0;
+        // If student only has excused assessments (or no assessments), show null for average
+        const studentAverageScore = hasNonExcusedAssessment && totalMaxScore > 0 ?
+          Math.round((totalScore / totalMaxScore) * 100) : null;
 
         return {
           rowNumber: index + 1,
@@ -444,9 +449,10 @@ const AdminReport: React.FC = () => {
         // Calculate annual average (includes 0% for absent, excludes excused)
         const scoredWeeks = Object.values(weeklyScores).filter(w => !w.isExcused);
         const allPercentages = scoredWeeks.map(w => w.percentage);
+        // If student has no non-excused weeks, show null for annual average
         const annualAverage = allPercentages.length > 0
           ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
-          : 0;
+          : null;
 
         return {
           rowNumber: index + 1,
@@ -944,11 +950,15 @@ const AdminReport: React.FC = () => {
                               />
                             </TableCell>
                             <TableCell align="center">
-                              <Chip
-                                label={`${student.averageScore}%`}
-                                color={student.averageScore >= 80 ? 'success' : student.averageScore >= 70 ? 'primary' : student.averageScore >= 60 ? 'warning' : 'error'}
-                                size="small"
-                              />
+                              {student.averageScore !== null ? (
+                                <Chip
+                                  label={`${student.averageScore}%`}
+                                  color={student.averageScore >= 80 ? 'success' : student.averageScore >= 70 ? 'primary' : student.averageScore >= 60 ? 'warning' : 'error'}
+                                  size="small"
+                                />
+                              ) : (
+                                <Typography variant="body2" color="text.disabled">-</Typography>
+                              )}
                             </TableCell>
                             <TableCell align="center">{student.totalAssessments}</TableCell>
                             <TableCell align="center">{student.totalAttendance}</TableCell>
@@ -997,7 +1007,43 @@ const AdminReport: React.FC = () => {
                             {uniqueAssessments.map((assessment, idx) => {
                               const scoreData = student.assessmentScores[assessment.key];
                               if (scoreData) {
-                                const percentage = (scoreData.score / scoreData.maxScore) * 100;
+                                // Handle excused students - show 'E' in blue
+                                if (scoreData.isExcused) {
+                                  return (
+                                    <TableCell
+                                      key={idx}
+                                      align="center"
+                                      sx={{
+                                        bgcolor: '#e3f2fd',  // Light blue for excused
+                                        fontWeight: 'bold',
+                                        color: '#1976d2'
+                                      }}
+                                    >
+                                      <Tooltip title="Excused - Not included in average" arrow>
+                                        <span>E</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                  );
+                                }
+                                // Handle absent students - show '0' in red
+                                if (scoreData.isAbsent) {
+                                  return (
+                                    <TableCell
+                                      key={idx}
+                                      align="center"
+                                      sx={{
+                                        bgcolor: '#ffebee',  // Light red for absent
+                                        fontWeight: 'bold',
+                                        color: '#d32f2f'
+                                      }}
+                                    >
+                                      <Tooltip title="Absent - Counted as 0" arrow>
+                                        <span>0</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                  );
+                                }
+                                // Normal score
                                 return (
                                   <TableCell
                                     key={idx}
@@ -1019,18 +1065,26 @@ const AdminReport: React.FC = () => {
                               }
                             })}
                             <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
-                              <Chip
-                                label={`${student.averageScore}%`}
-                                color={student.averageScore >= 85 ? 'success' : student.averageScore >= 60 ? 'warning' : 'error'}
-                                size="small"
-                              />
+                              {student.averageScore !== null ? (
+                                <Chip
+                                  label={`${student.averageScore}%`}
+                                  color={student.averageScore >= 85 ? 'success' : student.averageScore >= 60 ? 'warning' : 'error'}
+                                  size="small"
+                                />
+                              ) : (
+                                <Typography variant="body2" color="text.disabled">-</Typography>
+                              )}
                             </TableCell>
                             <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
-                              <Chip
-                                label={`${student.attendancePercentage}%`}
-                                color={student.attendancePercentage >= 85 ? 'success' : student.attendancePercentage >= 60 ? 'warning' : 'error'}
-                                size="small"
-                              />
+                              {student.attendancePercentage > 0 ? (
+                                <Chip
+                                  label={`${student.attendancePercentage}%`}
+                                  color={student.attendancePercentage >= 85 ? 'success' : student.attendancePercentage >= 60 ? 'warning' : 'error'}
+                                  size="small"
+                                />
+                              ) : (
+                                <Typography variant="body2" color="text.disabled">-</Typography>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1140,11 +1194,15 @@ const AdminReport: React.FC = () => {
                               }
                             })}
                             <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
-                              <Chip
-                                label={`${student.annualAverage}%`}
-                                color={student.annualAverage >= 85 ? 'success' : student.annualAverage >= 60 ? 'warning' : 'error'}
-                                size="small"
-                              />
+                              {student.annualAverage !== null ? (
+                                <Chip
+                                  label={`${student.annualAverage}%`}
+                                  color={student.annualAverage >= 85 ? 'success' : student.annualAverage >= 60 ? 'warning' : 'error'}
+                                  size="small"
+                                />
+                              ) : (
+                                <Typography variant="body2" color="text.disabled">-</Typography>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
