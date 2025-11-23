@@ -1622,7 +1622,12 @@ export const exportGrandReportDetailedToExcel = (
       const columnName = `${assessment.name} (${assessment.maxScore})`;
 
       if (scoreData) {
-        rowData[columnName] = scoreData.score;
+        // Display 'E' for excused students instead of score
+        if (scoreData.isExcused) {
+          rowData[columnName] = 'E';
+        } else {
+          rowData[columnName] = scoreData.score;
+        }
       } else {
         rowData[columnName] = '-';
       }
@@ -1666,7 +1671,8 @@ export const exportGrandReportDetailedToExcel = (
 
     detailedReportData.forEach((student) => {
       const scoreData = student.assessmentScores[key];
-      if (scoreData) {
+      // Exclude excused students from class average calculation
+      if (scoreData && !scoreData.isExcused) {
         const percentage = Math.round((scoreData.score / scoreData.maxScore) * 100);
         scores.push(percentage);
       }
@@ -1883,13 +1889,13 @@ export const exportGrandReportWeeklyToExcel = (
     year: number;
     unit: string;
     groupName: string;
-    weeklyScores: Map<number, { percentage: number; assessmentCount: number; unit: string }>;
+    weeklyScores: Map<number, { percentage: number; assessmentCount: number; unit: string; isExcused?: boolean }>;
     annualAverage: number;
     attendancePercentage: number;
   }
 
   const studentWeeklyData: StudentWeeklyData[] = filteredStudents.map(student => {
-    const weeklyScores = new Map<number, { percentage: number; assessmentCount: number; unit: string }>();
+    const weeklyScores = new Map<number, { percentage: number; assessmentCount: number; unit: string; isExcused?: boolean }>();
     const studentAssessments = filteredAssessments.filter(a => a.studentId === student.id);
 
     // Calculate scores for each week (simplified - one assessment per week)
@@ -1898,18 +1904,29 @@ export const exportGrandReportWeeklyToExcel = (
       const weekAssessment = studentAssessments.find(a => a.week === week.weekNumber);
 
       if (weekAssessment) {
-        const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
-
-        weeklyScores.set(week.weekNumber, {
-          percentage,
-          assessmentCount: 1, // Always 1 since each week has one assessment
-          unit: week.unit
-        });
+        // Check if student was excused
+        if (weekAssessment.isExcused) {
+          weeklyScores.set(week.weekNumber, {
+            percentage: -1, // Use -1 to indicate excused (will display as 'E')
+            assessmentCount: 1,
+            unit: week.unit,
+            isExcused: true
+          });
+        } else {
+          const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
+          weeklyScores.set(week.weekNumber, {
+            percentage,
+            assessmentCount: 1, // Always 1 since each week has one assessment
+            unit: week.unit
+          });
+        }
       }
     });
 
-    // Calculate annual average
-    const allPercentages = Array.from(weeklyScores.values()).map(w => w.percentage);
+    // Calculate annual average (exclude excused students from average)
+    const allPercentages = Array.from(weeklyScores.values())
+      .filter(w => !w.isExcused)
+      .map(w => w.percentage);
     const annualAverage = allPercentages.length > 0
       ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
       : 0;
@@ -1981,7 +1998,12 @@ export const exportGrandReportWeeklyToExcel = (
       const weekScore = student.weeklyScores.get(week.weekNumber);
 
       if (weekScore) {
-        rowData[weekLabel] = weekScore.percentage;
+        // Display 'E' for excused students instead of 0
+        if (weekScore.isExcused) {
+          rowData[weekLabel] = 'E';
+        } else {
+          rowData[weekLabel] = weekScore.percentage;
+        }
       } else {
         rowData[weekLabel] = '-';
       }
@@ -2021,7 +2043,8 @@ export const exportGrandReportWeeklyToExcel = (
 
     studentWeeklyData.forEach(student => {
       const weekScore = student.weeklyScores.get(week.weekNumber);
-      if (weekScore) {
+      // Exclude excused students from class average calculation
+      if (weekScore && !weekScore.isExcused) {
         weekScores.push(weekScore.percentage);
       }
     });
