@@ -76,7 +76,7 @@ const Attendance: React.FC = () => {
     return group ? group.name : 'Unknown Group';
   };
 
-  const getAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | null => {
+  const getAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | 'excused' | null => {
     const record = attendanceRecords.find(r => r.studentId === studentId);
     return record ? record.status : null;
   };
@@ -156,7 +156,7 @@ const Attendance: React.FC = () => {
     return { present, absent, late, total };
   };
 
-  const getStatusIcon = (status: 'present' | 'absent' | 'late' | null) => {
+  const getStatusIcon = (status: 'present' | 'absent' | 'late' | 'excused' | null) => {
     switch (status) {
       case 'present':
         return <CheckCircle sx={{ color: 'success.main' }} />;
@@ -164,12 +164,14 @@ const Attendance: React.FC = () => {
         return <Schedule sx={{ color: 'warning.main' }} />;
       case 'absent':
         return <Cancel sx={{ color: 'error.main' }} />;
+      case 'excused':
+        return <CheckCircle sx={{ color: 'info.main' }} />;
       default:
         return <CheckCircle sx={{ color: 'grey.500' }} />;
     }
   };
 
-  const getStatusColor = (status: 'present' | 'absent' | 'late' | null) => {
+  const getStatusColor = (status: 'present' | 'absent' | 'late' | 'excused' | null) => {
     switch (status) {
       case 'present':
         return 'success';
@@ -177,6 +179,8 @@ const Attendance: React.FC = () => {
         return 'warning';
       case 'absent':
         return 'error';
+      case 'excused':
+        return 'info';
       default:
         return 'default';
     }

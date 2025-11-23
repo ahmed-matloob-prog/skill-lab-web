@@ -25,7 +25,7 @@ export interface AttendanceRecord {
   id: string;
   studentId: string;
   date: string; // Only date needed
-  status: 'present' | 'absent' | 'late';
+  status: 'present' | 'absent' | 'late' | 'excused';
   timestamp: string;
   synced: boolean;
   trainerId: string;
@@ -50,6 +50,9 @@ export interface AssessmentRecord {
   timestamp: string;
   synced: boolean;
   trainerId: string;
+
+  // Excused student (has valid excuse - excluded from average calculation)
+  isExcused?: boolean;                 // Student was excused (medical leave, etc.)
 
   // Export to Admin workflow
   exportedToAdmin?: boolean;           // Has trainer exported this to admin?

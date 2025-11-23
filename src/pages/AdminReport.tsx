@@ -140,9 +140,10 @@ const AdminReport: React.FC = () => {
       const averageAttendanceRate = totalAttendance > 0 ?
         Math.round((presentCount / totalAttendance) * 100) : 0;
 
-      // Calculate average score
-      const totalScore = groupFilteredAssessments.reduce((sum, a) => sum + a.score, 0);
-      const totalMaxScore = groupFilteredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+      // Calculate average score (excluding excused students)
+      const scoredAssessments = groupFilteredAssessments.filter(a => !a.isExcused);
+      const totalScore = scoredAssessments.reduce((sum, a) => sum + a.score, 0);
+      const totalMaxScore = scoredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
       const averageScore = totalMaxScore > 0 ?
         Math.round((totalScore / totalMaxScore) * 100) : 0;
 
@@ -191,10 +192,11 @@ const AdminReport: React.FC = () => {
         const attendanceRate = attendanceCount > 0 ?
           Math.round((presentCount / attendanceCount) * 100) : 0;
 
-        // Calculate score including 0 for absent days
-        let totalScore = studentAssessments.reduce((sum, a) => sum + a.score, 0);
-        let totalMaxScore = studentAssessments.reduce((sum, a) => sum + a.maxScore, 0);
-        let totalAssessmentCount = studentAssessments.length;
+        // Calculate score including 0 for absent days (excluding excused)
+        const scoredAssessments = studentAssessments.filter(a => !a.isExcused);
+        let totalScore = scoredAssessments.reduce((sum, a) => sum + a.score, 0);
+        let totalMaxScore = scoredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
+        let totalAssessmentCount = scoredAssessments.length;
 
         // Find unique assessment sessions (by date + name + type)
         const allAssessmentSessions = new Map<string, { date: string; maxScore: number }>();
@@ -257,7 +259,7 @@ const AdminReport: React.FC = () => {
           Math.round((presentCount / attendanceCount) * 100) : 0;
 
         // Create a map of assessment scores for this student
-        const scoresMap: { [key: string]: { score: number; maxScore: number; isAbsent?: boolean } } = {};
+        const scoresMap: { [key: string]: { score: number; maxScore: number; isAbsent?: boolean; isExcused?: boolean } } = {};
 
         // First, add all assessments the student has scores for
         studentAssessments.forEach(assessment => {
@@ -265,6 +267,7 @@ const AdminReport: React.FC = () => {
           scoresMap[key] = {
             score: assessment.score,
             maxScore: assessment.maxScore,
+            isExcused: assessment.isExcused,
           };
         });
 
@@ -286,12 +289,14 @@ const AdminReport: React.FC = () => {
           }
         });
 
-        // Calculate average including 0 for absent
+        // Calculate average including 0 for absent (excluding excused)
         let totalScore = 0;
         let totalMaxScore = 0;
         Object.values(scoresMap).forEach(s => {
-          totalScore += s.score;
-          totalMaxScore += s.maxScore;
+          if (!s.isExcused) {  // Exclude excused from average
+            totalScore += s.score;
+            totalMaxScore += s.maxScore;
+          }
         });
         const studentAverageScore = totalMaxScore > 0 ?
           Math.round((totalScore / totalMaxScore) * 100) : 0;
@@ -365,23 +370,31 @@ const AdminReport: React.FC = () => {
       setSortedWeeks(sortedWeeksList);
 
       // Calculate weekly scores for each student (simplified - one assessment per week)
-      // IMPORTANT: Absent students are counted as 0% in the average
+      // IMPORTANT: Absent students are counted as 0% in the average, excused are excluded
       const weeklyData = filteredStudents.map((student, index) => {
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
         const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
-        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean } } = {};
+        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean; isExcused?: boolean } } = {};
 
         sortedWeeksList.forEach(week => {
           // Find the single assessment for this week
           const weekAssessment = studentAssessments.find(a => a.week === week.weekNumber);
 
           if (weekAssessment) {
-            const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
-
-            weeklyScores[week.weekNumber] = {
-              percentage,
-              assessmentCount: 1 // Always 1 since each week has one assessment
-            };
+            if (weekAssessment.isExcused) {
+              // Excused students - mark but don't include in average
+              weeklyScores[week.weekNumber] = {
+                percentage: 0,
+                assessmentCount: 1,
+                isExcused: true
+              };
+            } else {
+              const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
+              weeklyScores[week.weekNumber] = {
+                percentage,
+                assessmentCount: 1
+              };
+            }
           } else {
             // Check if student was absent on this assessment date
             // Get the reference assessment to find the date
@@ -404,8 +417,9 @@ const AdminReport: React.FC = () => {
           }
         });
 
-        // Calculate annual average (includes 0% for absent students)
-        const allPercentages = Object.values(weeklyScores).map(w => w.percentage);
+        // Calculate annual average (includes 0% for absent, excludes excused)
+        const scoredWeeks = Object.values(weeklyScores).filter(w => !w.isExcused);
+        const allPercentages = scoredWeeks.map(w => w.percentage);
         const annualAverage = allPercentages.length > 0
           ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
           : 0;
@@ -1036,6 +1050,43 @@ const AdminReport: React.FC = () => {
                             {sortedWeeks.map((week, idx) => {
                               const weekScore = student.weeklyScores[week.weekNumber];
                               if (weekScore) {
+                                // Handle excused students - show 'E' in blue
+                                if (weekScore.isExcused) {
+                                  return (
+                                    <TableCell
+                                      key={idx}
+                                      align="center"
+                                      sx={{
+                                        bgcolor: '#e3f2fd',  // Light blue for excused
+                                        fontWeight: 'bold',
+                                        color: '#1976d2'
+                                      }}
+                                    >
+                                      <Tooltip title="Excused - Not included in average" arrow>
+                                        <span>E</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                  );
+                                }
+                                // Handle absent students - show '0%' in red
+                                if (weekScore.isAbsent) {
+                                  return (
+                                    <TableCell
+                                      key={idx}
+                                      align="center"
+                                      sx={{
+                                        bgcolor: '#ffebee',  // Light red for absent
+                                        fontWeight: 'bold',
+                                        color: '#d32f2f'
+                                      }}
+                                    >
+                                      <Tooltip title="Absent - Counted as 0%" arrow>
+                                        <span>0%</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                  );
+                                }
+                                // Normal score
                                 const percentage = weekScore.percentage;
                                 const bgColor = percentage >= 85 ? '#e8f5e9' : percentage >= 60 ? '#fff9c4' : '#ffebee';
                                 return (

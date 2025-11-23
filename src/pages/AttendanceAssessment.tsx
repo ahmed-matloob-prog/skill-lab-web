@@ -209,12 +209,12 @@ const AttendanceAssessment: React.FC = () => {
   };
 
   // Attendance functions
-  const getAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | null => {
+  const getAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | 'excused' | null => {
     const record = attendanceRecords.find(r => r.studentId === studentId);
     return record ? record.status : null;
   };
 
-  const handleAttendanceChange = async (studentId: string, status: 'present' | 'absent' | 'late') => {
+  const handleAttendanceChange = async (studentId: string, status: 'present' | 'absent' | 'late' | 'excused') => {
     try {
       const existingRecord = attendanceRecords.find(r => r.studentId === studentId);
       const dateString = selectedDate.format('YYYY-MM-DD');
@@ -415,7 +415,7 @@ const AttendanceAssessment: React.FC = () => {
     return { present, absent, late, total };
   };
 
-  const getStatusIcon = (status: 'present' | 'absent' | 'late' | null) => {
+  const getStatusIcon = (status: 'present' | 'absent' | 'late' | 'excused' | null) => {
     switch (status) {
       case 'present':
         return <CheckCircle sx={{ color: 'success.main' }} />;
@@ -423,12 +423,14 @@ const AttendanceAssessment: React.FC = () => {
         return <Schedule sx={{ color: 'warning.main' }} />;
       case 'absent':
         return <Cancel sx={{ color: 'error.main' }} />;
+      case 'excused':
+        return <CheckCircle sx={{ color: 'info.main' }} />;
       default:
         return <CheckCircle sx={{ color: 'grey.500' }} />;
     }
   };
 
-  const getStatusColor = (status: 'present' | 'absent' | 'late' | null) => {
+  const getStatusColor = (status: 'present' | 'absent' | 'late' | 'excused' | null) => {
     switch (status) {
       case 'present':
         return 'success';
@@ -436,6 +438,8 @@ const AttendanceAssessment: React.FC = () => {
         return 'warning';
       case 'absent':
         return 'error';
+      case 'excused':
+        return 'info';
       default:
         return 'default';
     }

@@ -74,7 +74,7 @@ const CombinedInput: React.FC = () => {
   // Combined input state - stores both attendance and scores for each student
   const [studentData, setStudentData] = useState<{
     [studentId: string]: {
-      attendance: 'present' | 'absent' | 'late' | null;
+      attendance: 'present' | 'absent' | 'late' | 'excused' | null;
       score: string;
     }
   }>({});
@@ -151,7 +151,7 @@ const CombinedInput: React.FC = () => {
     return group ? group.name : 'Unknown Group';
   };
 
-  const getAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | null => {
+  const getAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | 'excused' | null => {
     const record = attendanceRecords.find(r => r.studentId === studentId);
     return record ? record.status : null;
   };
@@ -179,7 +179,7 @@ const CombinedInput: React.FC = () => {
       setAttendanceRecords(filteredRecords);
       
       // Initialize student data with existing attendance
-      const initialData: { [studentId: string]: { attendance: 'present' | 'absent' | 'late' | null; score: string } } = {};
+      const initialData: { [studentId: string]: { attendance: 'present' | 'absent' | 'late' | 'excused' | null; score: string } } = {};
       filteredStudents.forEach(student => {
         const existingAttendance = filteredRecords.find(r => r.studentId === student.id);
         initialData[student.id] = {
@@ -195,14 +195,14 @@ const CombinedInput: React.FC = () => {
     }
   };
 
-  const handleAttendanceChange = (studentId: string, status: 'present' | 'absent' | 'late') => {
+  const handleAttendanceChange = (studentId: string, status: 'present' | 'absent' | 'late' | 'excused') => {
     setStudentData(prev => ({
       ...prev,
       [studentId]: {
         ...prev[studentId],
         attendance: status,
-        // Clear score if marking as absent
-        score: status === 'absent' ? '' : prev[studentId]?.score || ''
+        // Clear score if marking as absent or excused
+        score: (status === 'absent' || status === 'excused') ? '' : prev[studentId]?.score || ''
       }
     }));
   };
@@ -274,8 +274,29 @@ const CombinedInput: React.FC = () => {
           attendanceCount++;
         }
 
+        // Handle excused students - create assessment record with isExcused flag
+        if (data.attendance === 'excused') {
+          const assessmentData = {
+            studentId: student.id,
+            assessmentName: assessmentForm.name.trim(),
+            assessmentType: assessmentForm.type,
+            score: 0,  // No score for excused
+            maxScore: maxScoreNum,
+            date: dateString,
+            year: student.year,
+            groupId: student.groupId,
+            unit: selectedUnit !== 'all' ? selectedUnit : undefined,
+            week: selectedWeek as number,
+            trainerId: user?.id || '',
+            synced: false,
+            isExcused: true,  // Mark as excused - excluded from average
+          };
+
+          await addAssessmentRecord(assessmentData);
+          assessmentCount++;
+        }
         // Save assessment score if provided (but not for absent students)
-        if (data.score && data.score.trim() !== '') {
+        else if (data.score && data.score.trim() !== '') {
           // Prevent saving scores for absent students
           if (data.attendance === 'absent') {
             setError(`Cannot save assessment score for ${student.name} - student is marked as absent`);
@@ -337,7 +358,7 @@ const CombinedInput: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (status: 'present' | 'absent' | 'late' | null) => {
+  const getStatusIcon = (status: 'present' | 'absent' | 'late' | 'excused' | null) => {
     switch (status) {
       case 'present':
         return <CheckCircle sx={{ color: 'success.main' }} />;
@@ -345,12 +366,14 @@ const CombinedInput: React.FC = () => {
         return <Schedule sx={{ color: 'warning.main' }} />;
       case 'absent':
         return <Cancel sx={{ color: 'error.main' }} />;
+      case 'excused':
+        return <Schedule sx={{ color: 'info.main' }} />;
       default:
         return <CheckCircle sx={{ color: 'grey.500' }} />;
     }
   };
 
-  const getStatusColor = (status: 'present' | 'absent' | 'late' | null) => {
+  const getStatusColor = (status: 'present' | 'absent' | 'late' | 'excused' | null) => {
     switch (status) {
       case 'present':
         return 'success';
@@ -358,6 +381,8 @@ const CombinedInput: React.FC = () => {
         return 'warning';
       case 'absent':
         return 'error';
+      case 'excused':
+        return 'info';
       default:
         return 'default';
     }
@@ -598,6 +623,14 @@ const CombinedInput: React.FC = () => {
                               >
                                 Absent
                               </Button>
+                              <Button
+                                size="small"
+                                variant={currentData.attendance === 'excused' ? 'contained' : 'outlined'}
+                                color="info"
+                                onClick={() => handleAttendanceChange(student.id, 'excused')}
+                              >
+                                Excused
+                              </Button>
                             </Box>
                           </TableCell>
                           <TableCell align="center">
@@ -609,8 +642,11 @@ const CombinedInput: React.FC = () => {
                               placeholder="0"
                               inputProps={{ min: 0, max: assessmentForm.maxScore }}
                               sx={{ width: 100 }}
-                              disabled={currentData.attendance === 'absent'}
-                              helperText={currentData.attendance === 'absent' ? 'N/A (Absent)' : ''}
+                              disabled={currentData.attendance === 'absent' || currentData.attendance === 'excused'}
+                              helperText={
+                                currentData.attendance === 'absent' ? 'N/A (Absent=0)' :
+                                currentData.attendance === 'excused' ? 'N/A (Excused)' : ''
+                              }
                             />
                           </TableCell>
                         </TableRow>
