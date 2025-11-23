@@ -1633,9 +1633,9 @@ export const exportGrandReportDetailedToExcel = (
       }
     });
 
-    // Final calculated columns
-    rowData['Average'] = student.averageScore;
-    rowData['Attendance'] = student.attendancePercentage;
+    // Final calculated columns - handle null averages
+    rowData['Average'] = student.averageScore !== null ? student.averageScore : '-';
+    rowData['Attendance'] = student.attendancePercentage > 0 ? student.attendancePercentage : '-';
 
     detailedData.push(rowData);
   });
@@ -1890,7 +1890,7 @@ export const exportGrandReportWeeklyToExcel = (
     unit: string;
     groupName: string;
     weeklyScores: Map<number, { percentage: number; assessmentCount: number; unit: string; isExcused?: boolean }>;
-    annualAverage: number;
+    annualAverage: number | null;
     attendancePercentage: number;
   }
 
@@ -1927,9 +1927,10 @@ export const exportGrandReportWeeklyToExcel = (
     const allPercentages = Array.from(weeklyScores.values())
       .filter(w => !w.isExcused)
       .map(w => w.percentage);
+    // Return null if no non-excused assessments
     const annualAverage = allPercentages.length > 0
       ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
-      : 0;
+      : null;
 
     // Get group name
     const group = groups.find(g => g.id === student.groupId);
@@ -2009,7 +2010,7 @@ export const exportGrandReportWeeklyToExcel = (
       }
     });
 
-    rowData['Annual Average'] = student.annualAverage;
+    rowData['Annual Average'] = student.annualAverage !== null ? student.annualAverage : '-';
     weeklyData.push(rowData);
   });
 
@@ -2057,10 +2058,12 @@ export const exportGrandReportWeeklyToExcel = (
     }
   });
 
-  const allAnnualAverages = studentWeeklyData.map(s => s.annualAverage).filter(a => a > 0);
+  const allAnnualAverages = studentWeeklyData
+    .map(s => s.annualAverage)
+    .filter((a): a is number => a !== null && a > 0);
   const classAnnualAverage = allAnnualAverages.length > 0
     ? Math.round(allAnnualAverages.reduce((sum, a) => sum + a, 0) / allAnnualAverages.length)
-    : 0;
+    : '-';
 
   summaryRow['Annual Average'] = classAnnualAverage;
   weeklyData.push(summaryRow);
@@ -2142,7 +2145,7 @@ export const exportGrandReportWeeklyToExcel = (
   statsData.push({ 'Metric': 'Total Students', 'Value': filteredStudents.length, 'Details': 'Enrolled students' });
   statsData.push({ 'Metric': 'Total Weeks', 'Value': sortedWeeks.length, 'Details': 'Weeks with assessments' });
   statsData.push({ 'Metric': 'Total Assessments', 'Value': filteredAssessments.length, 'Details': 'All assessments' });
-  statsData.push({ 'Metric': 'Class Annual Average', 'Value': `${classAnnualAverage}%`, 'Details': 'Average across all students' });
+  statsData.push({ 'Metric': 'Class Annual Average', 'Value': classAnnualAverage !== '-' ? `${classAnnualAverage}%` : '-', 'Details': 'Average across all students' });
 
   statsData.push({ 'Metric': '', 'Value': '', 'Details': '' });
   statsData.push({ 'Metric': '=== Weekly Performance ===', 'Value': '', 'Details': '' });
