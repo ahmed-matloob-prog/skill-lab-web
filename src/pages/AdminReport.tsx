@@ -185,10 +185,12 @@ const AdminReport: React.FC = () => {
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
+        // Fallback chain: assessment unit -> student unit -> group's currentUnit -> ''
         const latestAssessment = studentAssessments.length > 0
           ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
           : null;
-        const studentUnit = latestAssessment?.unit || student.unit || '';
+        const studentGroup = groups.find(g => g.id === student.groupId);
+        const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '';
 
         // Calculate student-specific stats
         const attendanceCount = studentAttendance.length;
@@ -257,10 +259,12 @@ const AdminReport: React.FC = () => {
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
+        // Fallback chain: assessment unit -> student unit -> group's currentUnit -> '-'
         const latestAssessment = studentAssessments.length > 0
           ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
           : null;
-        const studentUnit = latestAssessment?.unit || student.unit || '-';
+        const studentGroup = groups.find(g => g.id === student.groupId);
+        const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '-';
 
         // Calculate student-specific stats
         const attendanceCount = studentAttendance.length;
@@ -389,10 +393,12 @@ const AdminReport: React.FC = () => {
         const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean; isExcused?: boolean } } = {};
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
+        // Fallback chain: assessment unit -> student unit -> group's currentUnit -> '-'
         const latestAssessment = studentAssessments.length > 0
           ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
           : null;
-        const studentUnit = latestAssessment?.unit || student.unit || '-';
+        const studentGroup = groups.find(g => g.id === student.groupId);
+        const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '-';
 
         sortedWeeksList.forEach(week => {
           // Find the single assessment for this week
