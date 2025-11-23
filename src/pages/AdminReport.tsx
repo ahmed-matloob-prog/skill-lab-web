@@ -193,8 +193,10 @@ const AdminReport: React.FC = () => {
         const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '';
 
         // Calculate student-specific stats
-        const attendanceCount = studentAttendance.length;
-        const presentCount = studentAttendance.filter(a =>
+        // Exclude 'excused' from attendance calculation (excused students don't affect attendance rate)
+        const nonExcusedAttendance = studentAttendance.filter(a => a.status !== 'excused');
+        const attendanceCount = nonExcusedAttendance.length;
+        const presentCount = nonExcusedAttendance.filter(a =>
           a.status === 'present' || a.status === 'late'
         ).length;
         const attendanceRate = attendanceCount > 0 ?
@@ -269,8 +271,10 @@ const AdminReport: React.FC = () => {
         const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '-';
 
         // Calculate student-specific stats
-        const attendanceCount = studentAttendance.length;
-        const presentCount = studentAttendance.filter(a =>
+        // Exclude 'excused' from attendance calculation (excused students don't affect attendance rate)
+        const nonExcusedAttendance = studentAttendance.filter(a => a.status !== 'excused');
+        const attendanceCount = nonExcusedAttendance.length;
+        const presentCount = nonExcusedAttendance.filter(a =>
           a.status === 'present' || a.status === 'late'
         ).length;
         const attendanceRate = attendanceCount > 0 ?
