@@ -178,10 +178,16 @@ const AdminReport: React.FC = () => {
 
       setUniqueAssessments(sortedAssessments);
 
+      // Get unique assessment dates for filtering attendance
+      const assessmentDates = new Set(groupFilteredAssessments.map(a => a.date));
+
       // Generate summary report data
       // IMPORTANT: Absent students are counted as 0% for missed assessments
       const reportData = filteredStudents.map(student => {
-        const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
+        // Only count attendance records on assessment dates
+        const studentAttendance = groupFilteredAttendance.filter(a =>
+          a.studentId === student.id && assessmentDates.has(a.date)
+        );
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
@@ -259,7 +265,10 @@ const AdminReport: React.FC = () => {
       // Generate detailed report data with individual assessment scores
       // IMPORTANT: Absent students are shown with 0 score and marked as absent
       const detailedData = filteredStudents.map((student, index) => {
-        const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
+        // Only count attendance records on assessment dates
+        const studentAttendance = groupFilteredAttendance.filter(a =>
+          a.studentId === student.id && assessmentDates.has(a.date)
+        );
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
@@ -398,7 +407,10 @@ const AdminReport: React.FC = () => {
       // IMPORTANT: Absent students are counted as 0% in the average, excused are excluded
       const weeklyData = filteredStudents.map((student, index) => {
         const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
-        const studentAttendance = groupFilteredAttendance.filter(a => a.studentId === student.id);
+        // Only count attendance records on assessment dates
+        const studentAttendance = groupFilteredAttendance.filter(a =>
+          a.studentId === student.id && assessmentDates.has(a.date)
+        );
         const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean; isExcused?: boolean } } = {};
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
