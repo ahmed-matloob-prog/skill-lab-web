@@ -34,13 +34,12 @@ import {
   BarChart,
   ViewList,
   TableChart,
-  CalendarToday,
   ViewModule,
 } from '@mui/icons-material';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
-import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary, exportGrandReportDetailedToExcel, exportGrandReportWeeklyToExcel } from '../utils/excelUtils';
+import { exportSimplifiedReportToExcel, exportUnitWeeklyPerformanceWithTrendsAndCharts, exportGroupPerformanceSummary, exportGrandReportDetailedToExcel } from '../utils/excelUtils';
 import { Student, User } from '../types';
 import AuthService from '../services/authService';
 
@@ -54,9 +53,7 @@ const AdminReport: React.FC = () => {
   const [reportData, setReportData] = useState<any[]>([]);
   const [detailedReportData, setDetailedReportData] = useState<any[]>([]);
   const [uniqueAssessments, setUniqueAssessments] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'summary' | 'detailed' | 'weekly'>('summary');
-  const [weeklyReportData, setWeeklyReportData] = useState<any[]>([]);
-  const [sortedWeeks, setSortedWeeks] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [loadingReport, setLoadingReport] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [summaryStats, setSummaryStats] = useState({
@@ -373,147 +370,6 @@ const AdminReport: React.FC = () => {
       });
 
       setDetailedReportData(detailedData);
-
-      // ============= GENERATE WEEK-BASED REPORT DATA =============
-      // Helper function to get week label (simplified - just show week number and unit)
-      const getWeekLabel = (weekNumber: number, unit: string, assessmentDate: Date): string => {
-        const formatDate = (d: Date) => {
-          const month = d.toLocaleDateString('en-US', { month: 'short' });
-          const day = d.getDate();
-          return `${month} ${day}`;
-        };
-
-        if (unit) {
-          return `Week ${weekNumber} (${unit}) - ${formatDate(assessmentDate)}`;
-        }
-        return `Week ${weekNumber} - ${formatDate(assessmentDate)}`;
-      };
-
-      // Group assessments by week number (from stored field)
-      interface WeekData {
-        weekNumber: number;
-        assessment: any; // Single assessment per week
-        date: Date;
-        unit: string;
-      }
-
-      const weekMap = new Map<number, WeekData>();
-
-      // Filter out assessments without week numbers
-      groupFilteredAssessments
-        .filter(assessment => assessment.week !== undefined && assessment.week !== null)
-        .forEach(assessment => {
-          const weekNumber = assessment.week!;
-          const assessmentDate = new Date(assessment.date);
-
-          // Since each week has exactly one assessment, just store it directly
-          weekMap.set(weekNumber, {
-            weekNumber,
-            assessment,
-            date: assessmentDate,
-            unit: assessment.unit || '-'
-          });
-        });
-
-      // Sort weeks by week number
-      const sortedWeeksList = Array.from(weekMap.values())
-        .sort((a, b) => a.weekNumber - b.weekNumber)
-        .map(week => ({
-          weekNumber: week.weekNumber,
-          label: getWeekLabel(week.weekNumber, week.unit, week.date),
-          unit: week.unit,
-          assessmentName: week.assessment.assessmentName
-        }));
-
-      setSortedWeeks(sortedWeeksList);
-
-      // Calculate weekly scores for each student (simplified - one assessment per week)
-      // IMPORTANT: Absent students are counted as 0% in the average, excused are excluded
-      const weeklyData = filteredStudents.map((student, index) => {
-        const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
-
-        // Get assessment dates specific to this student's group
-        const studentGroupAssessmentDates = new Set(
-          groupFilteredAssessments
-            .filter(a => a.groupId === student.groupId)
-            .map(a => a.date)
-        );
-
-        // Only count attendance records on dates when student's group had assessments
-        const studentAttendance = groupFilteredAttendance.filter(a =>
-          a.studentId === student.id && studentGroupAssessmentDates.has(a.date)
-        );
-        const weeklyScores: { [key: number]: { percentage: number; assessmentCount: number; isAbsent?: boolean; isExcused?: boolean } } = {};
-
-        // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
-        // Fallback chain: assessment unit -> student unit -> group's currentUnit -> '-'
-        const latestAssessment = studentAssessments.length > 0
-          ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-          : null;
-        const studentGroup = groups.find(g => g.id === student.groupId);
-        const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '-';
-
-        sortedWeeksList.forEach(week => {
-          // Find the single assessment for this week
-          const weekAssessment = studentAssessments.find(a => a.week === week.weekNumber);
-
-          if (weekAssessment) {
-            if (weekAssessment.isExcused) {
-              // Excused students - mark but don't include in average
-              weeklyScores[week.weekNumber] = {
-                percentage: 0,
-                assessmentCount: 1,
-                isExcused: true
-              };
-            } else {
-              const percentage = Math.round((weekAssessment.score / weekAssessment.maxScore) * 100);
-              weeklyScores[week.weekNumber] = {
-                percentage,
-                assessmentCount: 1
-              };
-            }
-          } else {
-            // Check if student was absent on this assessment date
-            // Get the reference assessment to find the date
-            const referenceAssessment = groupFilteredAssessments.find(a => a.week === week.weekNumber);
-            if (referenceAssessment) {
-              const assessmentDate = referenceAssessment.date;
-              const wasAbsent = studentAttendance.some(
-                a => a.date === assessmentDate && a.status === 'absent'
-              );
-
-              if (wasAbsent) {
-                // Absent students get 0% score
-                weeklyScores[week.weekNumber] = {
-                  percentage: 0,
-                  assessmentCount: 1,
-                  isAbsent: true
-                };
-              }
-            }
-          }
-        });
-
-        // Calculate annual average (includes 0% for absent, excludes excused)
-        const scoredWeeks = Object.values(weeklyScores).filter(w => !w.isExcused);
-        const allPercentages = scoredWeeks.map(w => w.percentage);
-        // If student has no non-excused weeks, show null for annual average
-        const annualAverage = allPercentages.length > 0
-          ? Math.round(allPercentages.reduce((sum, p) => sum + p, 0) / allPercentages.length)
-          : null;
-
-        return {
-          rowNumber: index + 1,
-          studentName: student.name,
-          year: student.year,
-          unit: studentUnit,
-          groupName: getGroupName(student.groupId),
-          weeklyScores,
-          annualAverage
-        };
-      });
-
-      setWeeklyReportData(weeklyData);
     } catch (error) {
       logger.error('Error generating report:', error);
     } finally {
@@ -523,25 +379,14 @@ const AdminReport: React.FC = () => {
 
   const handleExportReport = () => {
     try {
-      if (viewMode === 'weekly') {
-        // Export week-based view
-        exportGrandReportWeeklyToExcel(
-          assessments,
-          students,
-          groups,
-          selectedYear,
-          selectedGroup
-        );
-      } else {
-        // Export detailed view with all individual assessment columns (default for summary and detailed modes)
-        exportGrandReportDetailedToExcel(
-          detailedReportData,
-          uniqueAssessments,
-          students,
-          groups,
-          selectedYear
-        );
-      }
+      // Export detailed view with all individual assessment columns
+      exportGrandReportDetailedToExcel(
+        detailedReportData,
+        uniqueAssessments,
+        students,
+        groups,
+        selectedYear
+      );
     } catch (error) {
       logger.error('Export failed:', error);
     }
@@ -603,10 +448,6 @@ const AdminReport: React.FC = () => {
   useEffect(() => {
     if (selectedYear !== 'all' || selectedGroup !== 'all') {
       generateGrandReport();
-      // For Year 2 and 3, default to weekly view (Week+Unit based)
-      if (selectedYear === 2 || selectedYear === 3) {
-        setViewMode('weekly');
-      }
     } else {
       setReportData([]);
       setSummaryStats({
@@ -954,14 +795,6 @@ const AdminReport: React.FC = () => {
                         </Box>
                       </Tooltip>
                     </ToggleButton>
-                    <ToggleButton value="weekly">
-                      <Tooltip title="Week-based view showing weekly performance">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <CalendarToday fontSize="small" />
-                          <span>By Week</span>
-                        </Box>
-                      </Tooltip>
-                    </ToggleButton>
                   </ToggleButtonGroup>
                 </Box>
                 <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
@@ -1128,124 +961,6 @@ const AdminReport: React.FC = () => {
                                 <Chip
                                   label={`${student.attendancePercentage}%`}
                                   color={student.attendancePercentage >= 85 ? 'success' : student.attendancePercentage >= 60 ? 'warning' : 'error'}
-                                  size="small"
-                                />
-                              ) : (
-                                <Typography variant="body2" color="text.disabled">-</Typography>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                  {viewMode === 'weekly' && (
-                    <Table size="small" sx={{ minWidth: 1200 }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>#</TableCell>
-                          <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Student Name</TableCell>
-                          <TableCell sx={{ position: 'sticky', left: 220, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Year</TableCell>
-                          <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Unit</TableCell>
-                          <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1, fontWeight: 'bold' }}>Group</TableCell>
-                          {/* Dynamic week columns */}
-                          {sortedWeeks.map((week, idx) => (
-                            <TableCell key={idx} align="center" sx={{ fontWeight: 'bold', minWidth: 120 }}>
-                              <Tooltip title={`Assessment: ${week.assessmentName} | Unit: ${week.unit}`} arrow>
-                                <Box>
-                                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold' }}>
-                                    {week.label}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {week.assessmentName}
-                                  </Typography>
-                                </Box>
-                              </Tooltip>
-                            </TableCell>
-                          ))}
-                          <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Annual Avg</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {weeklyReportData.map((student, index) => (
-                          <TableRow key={index} hover>
-                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>{student.rowNumber}</TableCell>
-                            <TableCell sx={{ position: 'sticky', left: 40, bgcolor: 'background.paper', zIndex: 1 }}>{student.studentName}</TableCell>
-                            <TableCell sx={{ position: 'sticky', left: 220, bgcolor: 'background.paper', zIndex: 1 }}>
-                              <Chip label={student.year} size="small" />
-                            </TableCell>
-                            <TableCell sx={{ position: 'sticky', left: 280, bgcolor: 'background.paper', zIndex: 1 }}>{student.unit}</TableCell>
-                            <TableCell sx={{ position: 'sticky', left: 340, bgcolor: 'background.paper', zIndex: 1 }}>{student.groupName}</TableCell>
-                            {/* Dynamic week score columns */}
-                            {sortedWeeks.map((week, idx) => {
-                              const weekScore = student.weeklyScores[week.weekNumber];
-                              if (weekScore) {
-                                // Handle excused students - show 'E' in blue
-                                if (weekScore.isExcused) {
-                                  return (
-                                    <TableCell
-                                      key={idx}
-                                      align="center"
-                                      sx={{
-                                        bgcolor: '#e3f2fd',  // Light blue for excused
-                                        fontWeight: 'bold',
-                                        color: '#1976d2'
-                                      }}
-                                    >
-                                      <Tooltip title="Excused - Not included in average" arrow>
-                                        <span>E</span>
-                                      </Tooltip>
-                                    </TableCell>
-                                  );
-                                }
-                                // Handle absent students - show '0%' in red
-                                if (weekScore.isAbsent) {
-                                  return (
-                                    <TableCell
-                                      key={idx}
-                                      align="center"
-                                      sx={{
-                                        bgcolor: '#ffebee',  // Light red for absent
-                                        fontWeight: 'bold',
-                                        color: '#d32f2f'
-                                      }}
-                                    >
-                                      <Tooltip title="Absent - Counted as 0%" arrow>
-                                        <span>0%</span>
-                                      </Tooltip>
-                                    </TableCell>
-                                  );
-                                }
-                                // Normal score
-                                const percentage = weekScore.percentage;
-                                const bgColor = percentage >= 85 ? '#e8f5e9' : percentage >= 60 ? '#fff9c4' : '#ffebee';
-                                return (
-                                  <TableCell
-                                    key={idx}
-                                    align="center"
-                                    sx={{
-                                      bgcolor: bgColor,
-                                      fontWeight: 'bold'
-                                    }}
-                                  >
-                                    <Tooltip title={`${weekScore.assessmentCount} assessment(s)`} arrow>
-                                      <span>{percentage}%</span>
-                                    </Tooltip>
-                                  </TableCell>
-                                );
-                              } else {
-                                return (
-                                  <TableCell key={idx} align="center" sx={{ color: 'text.disabled' }}>
-                                    -
-                                  </TableCell>
-                                );
-                              }
-                            })}
-                            <TableCell align="center" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
-                              {student.annualAverage !== null ? (
-                                <Chip
-                                  label={`${student.annualAverage}%`}
-                                  color={student.annualAverage >= 85 ? 'success' : student.annualAverage >= 60 ? 'warning' : 'error'}
                                   size="small"
                                 />
                               ) : (
