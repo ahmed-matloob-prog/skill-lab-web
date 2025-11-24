@@ -1627,8 +1627,8 @@ export const exportGrandReportDetailedToExcel = (
 
     // Add each assessment score (dynamic columns in chronological order)
     uniqueAssessments.forEach((assessment) => {
-      // Construct the key from assessment properties (must match how it's stored in assessmentScores)
-      const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
+      // Use the assessment's key directly (set by AdminReport with correct format for Y1/Y2/Y3)
+      const key = assessment.key;
       const scoreData = student.assessmentScores[key];
       const columnName = getAssessmentColumnName(assessment, selectedYear);
 
@@ -1678,8 +1678,8 @@ export const exportGrandReportDetailedToExcel = (
   summaryRow['Group'] = '';
 
   uniqueAssessments.forEach((assessment) => {
-    // Construct the key from assessment properties (must match how it's stored in assessmentScores)
-    const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
+    // Use the assessment's key directly (set by AdminReport with correct format for Y1/Y2/Y3)
+    const key = assessment.key;
     const columnName = getAssessmentColumnName(assessment, selectedYear);
     const scores: number[] = [];
 

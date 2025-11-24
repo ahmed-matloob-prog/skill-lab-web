@@ -154,9 +154,21 @@ const AdminReport: React.FC = () => {
       });
 
       // Collect unique assessments (for detailed view)
+      // For Year 2/3: Group by week number to avoid duplicate columns for same week across groups
+      // For Year 1: Group by assessment name + date (original behavior)
       const assessmentMap = new Map();
       groupFilteredAssessments.forEach(assessment => {
-        const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+        let key: string;
+
+        if ((selectedYear === 2 || selectedYear === 3) && assessment.week) {
+          // For Year 2/3 with week numbers: group by week + unit to consolidate across groups
+          const unit = assessment.unit || '';
+          key = `week_${assessment.week}_${unit}_${assessment.maxScore}`;
+        } else {
+          // For Year 1 or assessments without week: use original date-based key
+          key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+        }
+
         if (!assessmentMap.has(key)) {
           assessmentMap.set(key, {
             name: assessment.assessmentName,
@@ -170,8 +182,11 @@ const AdminReport: React.FC = () => {
         }
       });
 
-      // Sort assessments by date
+      // Sort assessments by week number (for Y2/3) or date (for Y1)
       const sortedAssessments = Array.from(assessmentMap.values()).sort((a, b) => {
+        if ((selectedYear === 2 || selectedYear === 3) && a.week && b.week) {
+          return a.week - b.week;
+        }
         return new Date(a.date).getTime() - new Date(b.date).getTime();
       });
 
@@ -302,11 +317,21 @@ const AdminReport: React.FC = () => {
           Math.round((presentCount / attendanceCount) * 100) : 0;
 
         // Create a map of assessment scores for this student
+        // Use week-based key for Y2/3, date-based key for Y1
         const scoresMap: { [key: string]: { score: number; maxScore: number; isAbsent?: boolean; isExcused?: boolean } } = {};
+
+        // Helper to generate consistent key
+        const getAssessmentKey = (a: any): string => {
+          if ((selectedYear === 2 || selectedYear === 3) && a.week) {
+            const unit = a.unit || '';
+            return `week_${a.week}_${unit}_${a.maxScore}`;
+          }
+          return `${a.assessmentName}_${a.assessmentType}_${a.maxScore}_${a.date}`;
+        };
 
         // First, add all assessments the student has scores for
         studentAssessments.forEach(assessment => {
-          const key = `${assessment.assessmentName}_${assessment.assessmentType}_${assessment.maxScore}_${assessment.date}`;
+          const key = getAssessmentKey(assessment);
           scoresMap[key] = {
             score: assessment.score,
             maxScore: assessment.maxScore,
@@ -318,10 +343,9 @@ const AdminReport: React.FC = () => {
         // Only check assessments that belong to this student's group
         sortedAssessments
           .filter(assessment => {
-            // Check if this assessment exists for student's group
+            // Check if this assessment exists for student's group (by week for Y2/3)
             return groupFilteredAssessments.some(
-              a => a.groupId === student.groupId &&
-                `${a.assessmentName}_${a.assessmentType}_${a.maxScore}_${a.date}` === assessment.key
+              a => a.groupId === student.groupId && getAssessmentKey(a) === assessment.key
             );
           })
           .forEach(assessment => {
