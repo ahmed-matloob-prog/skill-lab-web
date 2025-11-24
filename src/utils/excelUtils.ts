@@ -1553,6 +1553,17 @@ export const importStudentsByGroupsFromExcel = (file: File): Promise<{
   });
 };
 
+// Helper function to get column name for assessment (Week-Unit for Y2/3, Name for Y1)
+const getAssessmentColumnName = (assessment: any, selectedYear: number | 'all'): string => {
+  // For Year 2 and 3, use Week-Unit format if week is available
+  if ((selectedYear === 2 || selectedYear === 3) && assessment.week) {
+    const unit = assessment.unit || '';
+    return `Week ${assessment.week}${unit ? ` (${unit})` : ''} - ${assessment.maxScore}`;
+  }
+  // Default: use assessment name
+  return `${assessment.name} (${assessment.maxScore})`;
+};
+
 // Grand Report Detailed Export with Individual Assessment Columns
 export const exportGrandReportDetailedToExcel = (
   detailedReportData: any[],
@@ -1580,7 +1591,7 @@ export const exportGrandReportDetailedToExcel = (
   headerRow1['Unit'] = '';
   headerRow1['Group'] = '';
   uniqueAssessments.forEach((assessment) => {
-    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    const columnName = getAssessmentColumnName(assessment, selectedYear);
     headerRow1[columnName] = '';
   });
   headerRow1['Average'] = '';
@@ -1595,7 +1606,7 @@ export const exportGrandReportDetailedToExcel = (
   headerRow2['Unit'] = '';
   headerRow2['Group'] = '';
   uniqueAssessments.forEach((assessment) => {
-    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    const columnName = getAssessmentColumnName(assessment, selectedYear);
     headerRow2[columnName] = '';
   });
   headerRow2['Average'] = '';
@@ -1619,7 +1630,7 @@ export const exportGrandReportDetailedToExcel = (
       // Construct the key from assessment properties (must match how it's stored in assessmentScores)
       const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
       const scoreData = student.assessmentScores[key];
-      const columnName = `${assessment.name} (${assessment.maxScore})`;
+      const columnName = getAssessmentColumnName(assessment, selectedYear);
 
       if (scoreData) {
         // Display 'E' for excused students instead of score
@@ -1651,7 +1662,7 @@ export const exportGrandReportDetailedToExcel = (
   emptyRow['Unit'] = '';
   emptyRow['Group'] = '';
   uniqueAssessments.forEach((assessment) => {
-    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    const columnName = getAssessmentColumnName(assessment, selectedYear);
     emptyRow[columnName] = '';
   });
   emptyRow['Average'] = '';
@@ -1669,7 +1680,7 @@ export const exportGrandReportDetailedToExcel = (
   uniqueAssessments.forEach((assessment) => {
     // Construct the key from assessment properties (must match how it's stored in assessmentScores)
     const key = `${assessment.name}_${assessment.type}_${assessment.maxScore}_${assessment.date}`;
-    const columnName = `${assessment.name} (${assessment.maxScore})`;
+    const columnName = getAssessmentColumnName(assessment, selectedYear);
     const scores: number[] = [];
 
     detailedReportData.forEach((student) => {

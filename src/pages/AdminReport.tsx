@@ -167,6 +167,8 @@ const AdminReport: React.FC = () => {
             maxScore: assessment.maxScore,
             date: assessment.date,
             key: key,
+            week: assessment.week,
+            unit: assessment.unit,
           });
         }
       });
