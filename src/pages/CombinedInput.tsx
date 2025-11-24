@@ -178,13 +178,14 @@ const CombinedInput: React.FC = () => {
       
       setAttendanceRecords(filteredRecords);
       
-      // Initialize student data with existing attendance
+      // Initialize student data - always start fresh (no pre-selected buttons)
+      // Attendance records are stored but we don't pre-populate buttons
+      // This forces trainer to make explicit selection each time
       const initialData: { [studentId: string]: { attendance: 'present' | 'absent' | 'late' | 'excused' | null; score: string } } = {};
       filteredStudents.forEach(student => {
-        const existingAttendance = filteredRecords.find(r => r.studentId === student.id);
         initialData[student.id] = {
-          attendance: existingAttendance ? existingAttendance.status : null,
-          score: studentData[student.id]?.score || ''
+          attendance: null,  // Always start with no selection
+          score: ''  // Always start with empty score
         };
       });
       setStudentData(initialData);
