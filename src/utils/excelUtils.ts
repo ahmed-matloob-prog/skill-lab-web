@@ -1687,28 +1687,28 @@ export const exportGrandReportDetailedToExcel = (
       const scoreData = student.assessmentScores[key];
       // Exclude excused students from class average calculation
       if (scoreData && !scoreData.isExcused) {
-        const percentage = Math.round((scoreData.score / scoreData.maxScore) * 100);
+        const percentage = Number(((scoreData.score / scoreData.maxScore) * 100).toFixed(2));
         scores.push(percentage);
       }
     });
 
     if (scores.length > 0) {
-      const avgPercentage = Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length);
+      const avgPercentage = Number((scores.reduce((sum, s) => sum + s, 0) / scores.length).toFixed(2));
       summaryRow[columnName] = avgPercentage;
     } else {
       summaryRow[columnName] = '-';
     }
   });
 
-  // Calculate overall averages
+  // Calculate overall averages (2 decimal places)
   const allAverageScores = detailedReportData.map(s => s.averageScore).filter(s => s > 0);
   const classAvgScore = allAverageScores.length > 0
-    ? Math.round(allAverageScores.reduce((sum, s) => sum + s, 0) / allAverageScores.length)
+    ? Number((allAverageScores.reduce((sum, s) => sum + s, 0) / allAverageScores.length).toFixed(2))
     : 0;
 
   const allAttendanceScores = detailedReportData.map(s => s.attendancePercentage).filter(s => s > 0);
   const classAvgAttendance = allAttendanceScores.length > 0
-    ? Math.round(allAttendanceScores.reduce((sum, s) => sum + s, 0) / allAttendanceScores.length)
+    ? Number((allAttendanceScores.reduce((sum, s) => sum + s, 0) / allAttendanceScores.length).toFixed(2))
     : 0;
 
   summaryRow['Average'] = classAvgScore;

@@ -142,7 +142,7 @@ const AdminReport: React.FC = () => {
       const totalScore = scoredAssessments.reduce((sum, a) => sum + a.score, 0);
       const totalMaxScore = scoredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
       const averageScore = totalMaxScore > 0 ?
-        Math.round((totalScore / totalMaxScore) * 100) : 0;
+        Number(((totalScore / totalMaxScore) * 100).toFixed(2)) : 0;
 
       setSummaryStats({
         totalStudents,
@@ -265,7 +265,7 @@ const AdminReport: React.FC = () => {
         // If student has no non-excused assessments, show null for average
         const hasNonExcusedAssessment = totalAssessmentCount > 0;
         const studentAverageScore = hasNonExcusedAssessment && totalMaxScore > 0 ?
-          Math.round((totalScore / totalMaxScore) * 100) : null;
+          Number(((totalScore / totalMaxScore) * 100).toFixed(2)) : null;
 
         return {
           studentName: student.name,
@@ -378,7 +378,7 @@ const AdminReport: React.FC = () => {
         });
         // If student only has excused assessments (or no assessments), show null for average
         const studentAverageScore = hasNonExcusedAssessment && totalMaxScore > 0 ?
-          Math.round((totalScore / totalMaxScore) * 100) : null;
+          Number(((totalScore / totalMaxScore) * 100).toFixed(2)) : null;
 
         return {
           rowNumber: index + 1,
