@@ -489,6 +489,36 @@ class DatabaseService {
     logger.log(`Assessment ${assessmentId} exported to admin (locked)`);
   }
 
+  // Admin can export any draft assessment (for orphaned drafts)
+  async adminExportAssessment(assessmentId: string, adminId: string): Promise<void> {
+    const assessments = await this.getAssessmentRecords();
+    const index = assessments.findIndex(a => a.id === assessmentId);
+
+    if (index === -1) {
+      throw new Error('Assessment not found');
+    }
+
+    const assessment = assessments[index];
+
+    // Validate: Must not be already exported
+    if (assessment.exportedToAdmin === true) {
+      throw new Error('Assessment already exported');
+    }
+
+    // Mark as exported by admin
+    assessments[index] = {
+      ...assessment,
+      exportedToAdmin: true,
+      exportedAt: new Date().toISOString(),
+      exportedBy: adminId,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: adminId
+    };
+
+    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    logger.log(`Assessment ${assessmentId} exported by admin ${adminId}`);
+  }
+
   async exportMultipleAssessmentsToAdmin(
     assessmentIds: string[],
     trainerId: string

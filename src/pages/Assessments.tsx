@@ -50,6 +50,7 @@ const Assessments: React.FC = () => {
     addAssessmentRecord,
     getAssessmentsByGroup,
     exportMultipleAssessmentsToAdmin,
+    adminExportAssessment,
     updateAssessmentRecord,
     deleteAssessmentRecord,
     loading
@@ -206,6 +207,20 @@ const Assessments: React.FC = () => {
     } catch (error) {
       logger.error('Delete failed:', error);
       alert('Failed to delete assessment. Please try again.');
+    }
+  };
+
+  // Admin export handler (for orphaned drafts)
+  const handleAdminExport = async (assessment: AssessmentRecord) => {
+    if (!user || user.role !== 'admin') return;
+
+    try {
+      await adminExportAssessment(assessment.id, user.id);
+      await loadSavedAssessments();
+      alert('Assessment exported successfully!');
+    } catch (error) {
+      logger.error('Admin export failed:', error);
+      alert('Failed to export assessment. Please try again.');
     }
   };
 
@@ -543,6 +558,18 @@ const Assessments: React.FC = () => {
                                                 >
                                                   Edit
                                                 </Button>
+                                                {/* Admin can export orphaned drafts */}
+                                                {user?.role === 'admin' && assessment.exportedToAdmin !== true && (
+                                                  <Button
+                                                    size="small"
+                                                    color="primary"
+                                                    variant="contained"
+                                                    startIcon={<Send />}
+                                                    onClick={() => handleAdminExport(assessment)}
+                                                  >
+                                                    Export
+                                                  </Button>
+                                                )}
                                                 {canDelete && (
                                                   <Button
                                                     size="small"

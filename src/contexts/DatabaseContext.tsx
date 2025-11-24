@@ -49,6 +49,7 @@ interface DatabaseContextType {
   // Export to Admin operations
   exportAssessmentToAdmin: (assessmentId: string, trainerId: string) => Promise<void>;
   exportMultipleAssessmentsToAdmin: (assessmentIds: string[], trainerId: string) => Promise<{ success: number; failed: number }>;
+  adminExportAssessment: (assessmentId: string, adminId: string) => Promise<void>;
   unlockAssessment: (assessmentId: string, adminId: string) => Promise<void>;
   getExportedAssessments: () => Promise<AssessmentRecord[]>;
   getDraftAssessments: (trainerId: string) => Promise<AssessmentRecord[]>;
@@ -514,6 +515,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return result;
   };
 
+  const adminExportAssessment = async (assessmentId: string, adminId: string): Promise<void> => {
+    await DatabaseService.adminExportAssessment(assessmentId, adminId);
+    await refreshAssessments();
+
+    // Sync to Firebase in background
+    const exportedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
+    if (exportedRecord) {
+      FirebaseSyncService.syncAssessment(exportedRecord).catch(error => {
+        logger.error('Error syncing admin-exported assessment to Firebase:', error);
+      });
+    }
+  };
+
   const unlockAssessment = async (assessmentId: string, adminId: string): Promise<void> => {
     await DatabaseService.unlockAssessment(assessmentId, adminId);
     await refreshAssessments();
@@ -693,6 +707,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Export to Admin operations
     exportAssessmentToAdmin,
     exportMultipleAssessmentsToAdmin,
+    adminExportAssessment,
     unlockAssessment,
     getExportedAssessments,
     getDraftAssessments,
