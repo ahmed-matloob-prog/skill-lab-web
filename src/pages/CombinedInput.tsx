@@ -242,6 +242,28 @@ const CombinedInput: React.FC = () => {
       return;
     }
 
+    // Check for duplicate week - warn if assessment already exists for same week + unit + group
+    if (selectedGroup !== 'all') {
+      const unit = selectedUnit !== 'all' ? selectedUnit : undefined;
+      const existingAssessment = assessments.find(a =>
+        a.groupId === selectedGroup &&
+        a.week === selectedWeek &&
+        a.unit === unit &&
+        a.exportedToAdmin === true  // Only check exported assessments
+      );
+
+      if (existingAssessment) {
+        const confirmOverwrite = window.confirm(
+          `Warning: An assessment for Week ${selectedWeek}${unit ? ` (${unit})` : ''} already exists for this group and has been exported.\n\n` +
+          `Existing assessment: "${existingAssessment.assessmentName}" on ${existingAssessment.date}\n\n` +
+          `Do you want to continue and create a new assessment for the same week?`
+        );
+        if (!confirmOverwrite) {
+          return;
+        }
+      }
+    }
+
     setLoadingSave(true);
     setError(null);
 
