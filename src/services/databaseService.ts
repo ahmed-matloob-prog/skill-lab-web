@@ -2,6 +2,28 @@ import { Student, Group, AttendanceRecord, AssessmentRecord } from '../types';
 import { logger } from '../utils/logger';
 import { STORAGE_KEYS } from '../constants';
 
+/**
+ * Safely saves data to localStorage with quota exceeded error handling.
+ * Throws a user-friendly error message when storage quota is exceeded.
+ */
+function safeLocalStorageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    if (error instanceof DOMException && (
+      error.name === 'QuotaExceededError' ||
+      error.name === 'NS_ERROR_DOM_QUOTA_REACHED' // Firefox
+    )) {
+      logger.error('Storage quota exceeded:', error);
+      throw new Error(
+        'Storage quota exceeded. Your browser storage is full. ' +
+        'Please clear some browser data or contact your administrator to export and clear old records.'
+      );
+    }
+    throw error;
+  }
+}
+
 class DatabaseService {
   private studentsKey = STORAGE_KEYS.STUDENTS;
   private groupsKey = STORAGE_KEYS.GROUPS;
@@ -14,25 +36,25 @@ class DatabaseService {
       const students = localStorage.getItem(this.studentsKey);
       if (!students) {
         // Start with empty students array for production
-        localStorage.setItem(this.studentsKey, JSON.stringify([]));
+        safeLocalStorageSet(this.studentsKey, JSON.stringify([]));
       }
 
       // Initialize groups with empty array if they don't exist
       // Groups are now managed manually through Admin Panel (custom groups)
       const groups = localStorage.getItem(this.groupsKey);
       if (!groups) {
-        localStorage.setItem(this.groupsKey, JSON.stringify([]));
+        safeLocalStorageSet(this.groupsKey, JSON.stringify([]));
       }
 
       const attendance = localStorage.getItem(this.attendanceKey);
       if (!attendance) {
         // Start with empty attendance array for production
-        localStorage.setItem(this.attendanceKey, JSON.stringify([]));
+        safeLocalStorageSet(this.attendanceKey, JSON.stringify([]));
       }
 
       const assessments = localStorage.getItem(this.assessmentsKey);
       if (!assessments) {
-        localStorage.setItem(this.assessmentsKey, JSON.stringify([]));
+        safeLocalStorageSet(this.assessmentsKey, JSON.stringify([]));
       }
     } catch (error) {
       logger.error('Error initializing database:', error);
@@ -66,7 +88,7 @@ class DatabaseService {
     };
 
     groups.push(newGroup);
-    localStorage.setItem(this.groupsKey, JSON.stringify(groups));
+    safeLocalStorageSet(this.groupsKey, JSON.stringify(groups));
 
     logger.log(`Group created: "${group.name}" (Year ${group.year})`);
 
@@ -89,7 +111,7 @@ class DatabaseService {
     const index = groups.findIndex(g => g.id === id);
     if (index !== -1) {
       groups[index] = { ...groups[index], ...updates, updatedAt: new Date().toISOString() };
-      localStorage.setItem(this.groupsKey, JSON.stringify(groups));
+      safeLocalStorageSet(this.groupsKey, JSON.stringify(groups));
     }
   }
 
@@ -97,7 +119,7 @@ class DatabaseService {
     // Delete the group and all related data
     const groups = await this.getGroups();
     const filteredGroups = groups.filter(g => g.id !== id);
-    localStorage.setItem(this.groupsKey, JSON.stringify(filteredGroups));
+    safeLocalStorageSet(this.groupsKey, JSON.stringify(filteredGroups));
 
     // Also delete related students, attendance and assessment records
     await this.deleteStudentsByGroup(id);
@@ -143,7 +165,7 @@ class DatabaseService {
     };
 
     students.push(newStudent);
-    localStorage.setItem(this.studentsKey, JSON.stringify(students));
+    safeLocalStorageSet(this.studentsKey, JSON.stringify(students));
 
     return id;
   }
@@ -246,7 +268,7 @@ class DatabaseService {
     // Save all added students at once
     if (addedStudents.length > 0) {
       // Use the existingStudents array which already has the new students added
-      localStorage.setItem(this.studentsKey, JSON.stringify(existingStudents));
+      safeLocalStorageSet(this.studentsKey, JSON.stringify(existingStudents));
     }
     
     return {
@@ -297,14 +319,14 @@ class DatabaseService {
     const index = students.findIndex(s => s.id === id);
     if (index !== -1) {
       students[index] = { ...students[index], ...updates, updatedAt: new Date().toISOString() };
-      localStorage.setItem(this.studentsKey, JSON.stringify(students));
+      safeLocalStorageSet(this.studentsKey, JSON.stringify(students));
     }
   }
 
   async deleteStudent(id: string): Promise<void> {
     const students = await this.getStudents();
     const filteredStudents = students.filter(s => s.id !== id);
-    localStorage.setItem(this.studentsKey, JSON.stringify(filteredStudents));
+    safeLocalStorageSet(this.studentsKey, JSON.stringify(filteredStudents));
     
     // Also delete related attendance and assessment records
     await this.deleteAttendanceByStudent(id);
@@ -314,7 +336,7 @@ class DatabaseService {
   async deleteStudentsByGroup(groupId: string): Promise<void> {
     const students = await this.getStudents();
     const filteredStudents = students.filter(s => s.groupId !== groupId);
-    localStorage.setItem(this.studentsKey, JSON.stringify(filteredStudents));
+    safeLocalStorageSet(this.studentsKey, JSON.stringify(filteredStudents));
   }
 
   // Attendance operations
@@ -331,7 +353,7 @@ class DatabaseService {
 
     const attendance = await this.getAttendanceRecords();
     attendance.push(newRecord);
-    localStorage.setItem(this.attendanceKey, JSON.stringify(attendance));
+    safeLocalStorageSet(this.attendanceKey, JSON.stringify(attendance));
 
     return id;
   }
@@ -365,26 +387,26 @@ class DatabaseService {
     const index = attendance.findIndex(r => r.id === id);
     if (index !== -1) {
       attendance[index] = { ...attendance[index], ...updates };
-      localStorage.setItem(this.attendanceKey, JSON.stringify(attendance));
+      safeLocalStorageSet(this.attendanceKey, JSON.stringify(attendance));
     }
   }
 
   async deleteAttendanceRecord(id: string): Promise<void> {
     const attendance = await this.getAttendanceRecords();
     const filteredAttendance = attendance.filter(r => r.id !== id);
-    localStorage.setItem(this.attendanceKey, JSON.stringify(filteredAttendance));
+    safeLocalStorageSet(this.attendanceKey, JSON.stringify(filteredAttendance));
   }
 
   async deleteAttendanceByStudent(studentId: string): Promise<void> {
     const attendance = await this.getAttendanceRecords();
     const filteredAttendance = attendance.filter(r => r.studentId !== studentId);
-    localStorage.setItem(this.attendanceKey, JSON.stringify(filteredAttendance));
+    safeLocalStorageSet(this.attendanceKey, JSON.stringify(filteredAttendance));
   }
 
   async deleteAttendanceByGroup(groupId: string): Promise<void> {
     const attendance = await this.getAttendanceRecords();
     const filteredAttendance = attendance.filter(r => r.groupId !== groupId);
-    localStorage.setItem(this.attendanceKey, JSON.stringify(filteredAttendance));
+    safeLocalStorageSet(this.attendanceKey, JSON.stringify(filteredAttendance));
   }
 
   // Assessment operations
@@ -407,7 +429,7 @@ class DatabaseService {
 
     const assessments = await this.getAssessmentRecords();
     assessments.push(newRecord);
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
 
     return id;
   }
@@ -432,26 +454,26 @@ class DatabaseService {
     const index = assessments.findIndex(r => r.id === id);
     if (index !== -1) {
       assessments[index] = { ...assessments[index], ...updates };
-      localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+      safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
     }
   }
 
   async deleteAssessmentRecord(id: string): Promise<void> {
     const assessments = await this.getAssessmentRecords();
     const filteredAssessments = assessments.filter(r => r.id !== id);
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(filteredAssessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(filteredAssessments));
   }
 
   async deleteAssessmentsByStudent(studentId: string): Promise<void> {
     const assessments = await this.getAssessmentRecords();
     const filteredAssessments = assessments.filter(r => r.studentId !== studentId);
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(filteredAssessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(filteredAssessments));
   }
 
   async deleteAssessmentsByGroup(groupId: string): Promise<void> {
     const assessments = await this.getAssessmentRecords();
     const filteredAssessments = assessments.filter(r => r.groupId !== groupId);
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(filteredAssessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(filteredAssessments));
   }
 
   // Export to Admin operations
@@ -485,7 +507,7 @@ class DatabaseService {
       lastEditedBy: trainerId
     };
 
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
     logger.log(`Assessment ${assessmentId} exported to admin (locked)`);
   }
 
@@ -515,7 +537,7 @@ class DatabaseService {
       lastEditedBy: adminId
     };
 
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
     logger.log(`Assessment ${assessmentId} exported by admin ${adminId}`);
   }
 
@@ -563,7 +585,7 @@ class DatabaseService {
       lastEditedBy: adminId
     };
 
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
     logger.log(`Assessment ${assessmentId} unlocked by admin ${adminId}`);
   }
 
@@ -592,7 +614,7 @@ class DatabaseService {
         reviewedBy: adminId
       };
 
-      localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+      safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
       logger.log(`Assessment ${assessmentId} marked as reviewed by admin ${adminId}`);
     }
   }
@@ -624,7 +646,7 @@ class DatabaseService {
         record.synced = true;
       }
     });
-    localStorage.setItem(this.attendanceKey, JSON.stringify(attendance));
+    safeLocalStorageSet(this.attendanceKey, JSON.stringify(attendance));
   }
 
   async markAssessmentsSynced(ids: string[]): Promise<void> {
@@ -634,7 +656,7 @@ class DatabaseService {
         record.synced = true;
       }
     });
-    localStorage.setItem(this.assessmentsKey, JSON.stringify(assessments));
+    safeLocalStorageSet(this.assessmentsKey, JSON.stringify(assessments));
   }
 
   // Clear all data (for testing)
@@ -689,7 +711,7 @@ class DatabaseService {
     }
     
     // Save all groups (existing + new)
-    localStorage.setItem(this.groupsKey, JSON.stringify(allGroups));
+    safeLocalStorageSet(this.groupsKey, JSON.stringify(allGroups));
   }
 
   // Legacy method - no longer auto-generates groups
@@ -717,7 +739,7 @@ class DatabaseService {
       return group;
     });
 
-    localStorage.setItem(this.groupsKey, JSON.stringify(updatedGroups));
+    safeLocalStorageSet(this.groupsKey, JSON.stringify(updatedGroups));
     return updatedCount;
   }
 }

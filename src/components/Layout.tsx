@@ -18,6 +18,14 @@ import {
   Divider,
   Chip,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -35,6 +43,7 @@ import {
   CloudSync,
   Error as ErrorIcon,
   BarChart,
+  DeleteForever,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -51,8 +60,14 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [clearDataDialogOpen, setClearDataDialogOpen] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
   const { user, logout } = useAuth();
-  const { syncStatus, pendingSyncCount } = useDatabase();
+  const { syncStatus, pendingSyncCount, clearAllData } = useDatabase();
   const { language, setLanguage, t, isRTL } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
@@ -116,6 +131,37 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     await logout();
     navigate('/login');
     handleMenuClose();
+  };
+
+  const handleClearDataClick = () => {
+    handleMenuClose();
+    setClearDataDialogOpen(true);
+  };
+
+  const handleClearDataConfirm = async () => {
+    try {
+      await clearAllData();
+      setClearDataDialogOpen(false);
+      setSnackbar({
+        open: true,
+        message: 'Local data cleared successfully. Data will re-sync from cloud.',
+        severity: 'success'
+      });
+      // Reload the page to re-fetch data from Firebase
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to clear data. Please try again.',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
   };
 
   const menuItems = [
@@ -265,6 +311,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </ListItemIcon>
                 Profile
               </MenuItem>
+              <Divider />
+              <MenuItem onClick={handleClearDataClick}>
+                <ListItemIcon>
+                  <DeleteForever fontSize="small" color="warning" />
+                </ListItemIcon>
+                Clear Local Data
+              </MenuItem>
               <MenuItem onClick={handleLogout}>
                 <ListItemIcon>
                   <Logout fontSize="small" />
@@ -316,6 +369,45 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Toolbar />
         {children}
       </Box>
+
+      {/* Clear Local Data Confirmation Dialog */}
+      <Dialog
+        open={clearDataDialogOpen}
+        onClose={() => setClearDataDialogOpen(false)}
+        aria-labelledby="clear-data-dialog-title"
+        aria-describedby="clear-data-dialog-description"
+      >
+        <DialogTitle id="clear-data-dialog-title">
+          Clear Local Data?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="clear-data-dialog-description">
+            This will clear all locally stored data from your browser. Your data is safely backed up in the cloud and will automatically re-sync after clearing.
+            <br /><br />
+            <strong>Use this if you're experiencing storage errors or sync issues.</strong>
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setClearDataDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleClearDataConfirm} color="warning" variant="contained" autoFocus>
+            Clear Data
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Success/Error Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
