@@ -11,6 +11,7 @@ import {
   getDoc,
   getDocs,
   deleteDoc,
+  deleteField,
   query,
   where,
   orderBy,
@@ -265,10 +266,16 @@ class FirebaseSyncService {
   async syncGroup(group: Group): Promise<void> {
     if (!this.isAvailable()) return;
 
-    const groupData = {
+    // Build group data, using deleteField() to remove currentUnit if it's undefined
+    const groupData: Record<string, unknown> = {
       ...group,
       updatedAt: Timestamp.now()
     };
+
+    // If currentUnit is undefined/empty, explicitly delete the field in Firebase
+    if (!group.currentUnit) {
+      groupData.currentUnit = deleteField();
+    }
 
     try {
       if (this.isOnline) {
