@@ -129,10 +129,11 @@ const CombinedInput: React.FC = () => {
     }
     if (selectedYear !== 'all' && student.year !== selectedYear) return false;
     if (selectedGroup !== 'all' && student.groupId !== selectedGroup) return false;
-    // Filter by group's currentUnit instead of student's unit field
+    // Filter by group's currentUnit - but if group has no unit set, show students for any unit
     if (selectedUnit !== 'all') {
       const studentGroup = groups.find(g => g.id === student.groupId);
-      if (studentGroup?.currentUnit !== selectedUnit) return false;
+      // If group has a currentUnit set, it must match; if no currentUnit, allow any unit selection
+      if (studentGroup?.currentUnit && studentGroup.currentUnit !== selectedUnit) return false;
     }
     return true;
   });
