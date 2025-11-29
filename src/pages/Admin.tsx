@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -131,6 +131,118 @@ const Admin: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
 
+  // ==================== MEMOIZED LOOKUPS FOR PERFORMANCE ====================
+  // These are computed once and cached, avoiding expensive re-calculations on every render
+
+  // Map of groupId -> array of trainers assigned to that group
+  const trainersByGroup = useMemo(() => {
+    const map = new Map<string, User[]>();
+    groups.forEach(g => {
+      map.set(g.id, users.filter(u => u.assignedGroups?.includes(g.id)));
+    });
+    return map;
+  }, [groups, users]);
+
+  // Map of groupId -> student count
+  const studentCountByGroup = useMemo(() => {
+    const map = new Map<string, number>();
+    groups.forEach(g => {
+      map.set(g.id, students.filter(s => s.groupId === g.id).length);
+    });
+    return map;
+  }, [groups, students]);
+
+  // Map of groupId -> last activity date (pre-computed to avoid O(n*m) on each render)
+  const lastActivityByGroup = useMemo(() => {
+    const map = new Map<string, Date | null>();
+
+    // Build studentId -> groupId lookup for fast assessment grouping
+    const studentGroupMap = new Map<string, string>();
+    students.forEach(s => studentGroupMap.set(s.id, s.groupId));
+
+    // Group attendance timestamps by groupId
+    const groupTimestamps = new Map<string, number[]>();
+    groups.forEach(g => groupTimestamps.set(g.id, []));
+
+    attendance.forEach(a => {
+      if (a.timestamp && groupTimestamps.has(a.groupId)) {
+        groupTimestamps.get(a.groupId)!.push(new Date(a.timestamp).getTime());
+      }
+    });
+
+    // Group assessment timestamps by groupId (via student lookup)
+    assessments.forEach(a => {
+      if (a.timestamp) {
+        const groupId = studentGroupMap.get(a.studentId);
+        if (groupId && groupTimestamps.has(groupId)) {
+          groupTimestamps.get(groupId)!.push(new Date(a.timestamp).getTime());
+        }
+      }
+    });
+
+    // Compute max timestamp for each group
+    groups.forEach(g => {
+      const timestamps = groupTimestamps.get(g.id) || [];
+      if (timestamps.length === 0) {
+        map.set(g.id, null);
+      } else {
+        map.set(g.id, new Date(Math.max(...timestamps)));
+      }
+    });
+
+    return map;
+  }, [groups, students, attendance, assessments]);
+
+  // Memoized filtered groups for the Groups table
+  const filteredGroupsList = useMemo(() => {
+    let filtered = groups;
+
+    // Filter by year
+    if (groupFilterYear !== 'all') {
+      filtered = filtered.filter(g => g.year === groupFilterYear);
+    }
+
+    // Filter by trainer
+    if (groupFilterTrainer !== 'all') {
+      filtered = filtered.filter(g => {
+        const trainers = trainersByGroup.get(g.id) || [];
+        return trainers.some(t => t.id === groupFilterTrainer);
+      });
+    }
+
+    // Filter by search text
+    if (groupSearchText) {
+      filtered = filtered.filter(g =>
+        g.name.toLowerCase().includes(groupSearchText.toLowerCase()) ||
+        g.description?.toLowerCase().includes(groupSearchText.toLowerCase())
+      );
+    }
+
+    // Sort groups
+    return [...filtered].sort((a, b) => {
+      if (groupSortBy === 'name') {
+        return a.name.localeCompare(b.name);
+      } else {
+        return a.year - b.year || a.name.localeCompare(b.name);
+      }
+    });
+  }, [groups, groupFilterYear, groupFilterTrainer, groupSearchText, groupSortBy, trainersByGroup]);
+
+  // Memoized attendance stats
+  const attendanceStats = useMemo(() => ({
+    present: attendance.filter(a => a.status === 'present').length,
+    late: attendance.filter(a => a.status === 'late').length,
+    absent: attendance.filter(a => a.status === 'absent').length,
+  }), [attendance]);
+
+  // Memoized assessment stats
+  const assessmentStats = useMemo(() => ({
+    exams: assessments.filter(a => a.assessmentType === 'exam').length,
+    quizzes: assessments.filter(a => a.assessmentType === 'quiz').length,
+  }), [assessments]);
+
+  // ==================== END MEMOIZED LOOKUPS ====================
+
   useEffect(() => {
     if (user?.role === 'admin') {
       logger.log('Admin: Loading users and setting up subscription');
@@ -191,31 +303,14 @@ const Admin: React.FC = () => {
     setTabValue(newValue);
   };
 
-  // Helper function to get trainers assigned to a group
+  // Helper function to get trainers assigned to a group (uses memoized map)
   const getGroupTrainers = (groupId: string): User[] => {
-    return users.filter(u => u.assignedGroups?.includes(groupId));
+    return trainersByGroup.get(groupId) || [];
   };
 
-  // Helper function to get last activity for a group
+  // Helper function to get last activity for a group (uses memoized map)
   const getGroupLastActivity = (groupId: string): Date | null => {
-    const groupAttendance = attendance.filter(a => a.groupId === groupId);
-    const groupAssessments = assessments.filter(a => {
-      const student = students.find(s => s.id === a.studentId);
-      return student?.groupId === groupId;
-    });
-
-    const dates: Date[] = [];
-
-    groupAttendance.forEach(a => {
-      if (a.timestamp) dates.push(new Date(a.timestamp));
-    });
-
-    groupAssessments.forEach(a => {
-      if (a.timestamp) dates.push(new Date(a.timestamp));
-    });
-
-    if (dates.length === 0) return null;
-    return new Date(Math.max(...dates.map(d => d.getTime())));
+    return lastActivityByGroup.get(groupId) || null;
   };
 
   // Helper function to format last activity
@@ -1130,42 +1225,10 @@ const Admin: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(() => {
-                // Filter groups
-                let filtered = groups;
-
-                // Filter by year
-                if (groupFilterYear !== 'all') {
-                  filtered = filtered.filter(g => g.year === groupFilterYear);
-                }
-
-                // Filter by trainer
-                if (groupFilterTrainer !== 'all') {
-                  filtered = filtered.filter(g => {
-                    const trainers = getGroupTrainers(g.id);
-                    return trainers.some(t => t.id === groupFilterTrainer);
-                  });
-                }
-
-                // Filter by search text
-                if (groupSearchText) {
-                  filtered = filtered.filter(g =>
-                    g.name.toLowerCase().includes(groupSearchText.toLowerCase()) ||
-                    g.description?.toLowerCase().includes(groupSearchText.toLowerCase())
-                  );
-                }
-
-                // Sort groups
-                filtered = [...filtered].sort((a, b) => {
-                  if (groupSortBy === 'name') {
-                    return a.name.localeCompare(b.name);
-                  } else {
-                    return a.year - b.year || a.name.localeCompare(b.name);
-                  }
-                });
-
-                return filtered;
-              })().map((group) => (
+              {/* Use memoized filteredGroupsList instead of filtering on every render */}
+              {filteredGroupsList.map((group) => {
+                const trainers = trainersByGroup.get(group.id) || [];
+                return (
                 <TableRow key={group.id}>
                   <TableCell>{group.name}</TableCell>
                   <TableCell>
@@ -1179,28 +1242,24 @@ const Admin: React.FC = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {(() => {
-                      const trainers = getGroupTrainers(group.id);
-                      if (trainers.length === 0) {
-                        return <Typography variant="body2" color="text.secondary">No trainer assigned</Typography>;
-                      }
-                      return (
-                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                          {trainers.map(trainer => (
-                            <Chip
-                              key={trainer.id}
-                              label={trainer.username}
-                              size="small"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          ))}
-                        </Box>
-                      );
-                    })()}
+                    {trainers.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">No trainer assigned</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {trainers.map(trainer => (
+                          <Chip
+                            key={trainer.id}
+                            label={trainer.username}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    )}
                   </TableCell>
                   <TableCell>
-                    {students.filter(s => s.groupId === group.id).length}
+                    {studentCountByGroup.get(group.id) || 0}
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -1264,7 +1323,8 @@ const Admin: React.FC = () => {
                     </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -1321,13 +1381,13 @@ const Admin: React.FC = () => {
                   Total Records: {attendance.length}
                 </Typography>
                 <Typography variant="body2">
-                  Present: {attendance.filter(a => a.status === 'present').length}
+                  Present: {attendanceStats.present}
                 </Typography>
                 <Typography variant="body2">
-                  Late: {attendance.filter(a => a.status === 'late').length}
+                  Late: {attendanceStats.late}
                 </Typography>
                 <Typography variant="body2">
-                  Absent: {attendance.filter(a => a.status === 'absent').length}
+                  Absent: {attendanceStats.absent}
                 </Typography>
               </CardContent>
             </Card>
@@ -1345,10 +1405,10 @@ const Admin: React.FC = () => {
                   Average Score: {assessments.length > 0 ? Math.round(assessments.reduce((sum, a) => sum + a.score, 0) / assessments.length) : 0}
                 </Typography>
                 <Typography variant="body2">
-                  Exams: {assessments.filter(a => a.assessmentType === 'exam').length}
+                  Exams: {assessmentStats.exams}
                 </Typography>
                 <Typography variant="body2">
-                  Quizzes: {assessments.filter(a => a.assessmentType === 'quiz').length}
+                  Quizzes: {assessmentStats.quizzes}
                 </Typography>
               </CardContent>
             </Card>
