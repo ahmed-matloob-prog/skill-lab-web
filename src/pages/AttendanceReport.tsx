@@ -113,25 +113,29 @@ const AttendanceReport: React.FC = () => {
     ? accessibleGroups
     : accessibleGroups.filter(group => group.year === selectedYear);
 
-  // Get attendance value for a specific student and assessment
+  // Build attendance lookup map for O(1) access instead of O(n) search
+  const buildAttendanceLookup = () => {
+    const lookup = new Map<string, 1 | 0 | '-'>();
+    attendance.forEach(a => {
+      const key = `${a.studentId}|${a.date}|${a.trainerId}|${a.groupId}`;
+      let value: 1 | 0 | '-' = '-';
+      if (a.status === 'present' || a.status === 'late') value = 1;
+      else if (a.status === 'absent') value = 0;
+      lookup.set(key, value);
+    });
+    return lookup;
+  };
+
+  // Get attendance value using the lookup map
   const getAttendanceValue = (
+    attendanceLookup: Map<string, 1 | 0 | '-'>,
     studentId: string,
     assessmentDate: string,
     assessmentTrainerId: string,
     assessmentGroupId: string
   ): 1 | 0 | '-' => {
-    const record = attendance.find(
-      a =>
-        a.studentId === studentId &&
-        a.date === assessmentDate &&
-        a.trainerId === assessmentTrainerId &&
-        a.groupId === assessmentGroupId
-    );
-
-    if (!record) return '-';
-    if (record.status === 'present' || record.status === 'late') return 1;
-    if (record.status === 'absent') return 0;
-    return '-';
+    const key = `${studentId}|${assessmentDate}|${assessmentTrainerId}|${assessmentGroupId}`;
+    return attendanceLookup.get(key) || '-';
   };
 
   // Generate attendance report
@@ -236,7 +240,13 @@ const AttendanceReport: React.FC = () => {
         return true;
       });
 
-      // Step 7: Build attendance grid data
+      // Step 7: Build attendance lookup map ONCE for O(1) access
+      const attendanceLookup = buildAttendanceLookup();
+
+      // Step 8: Build group lookup map for O(1) access
+      const groupLookup = new Map(groups.map(g => [g.id, g]));
+
+      // Step 9: Build attendance grid data
       const gridData: AttendanceGridData[] = filteredStudents.map(student => {
         const attendanceByAssessment: { [key: string]: 1 | 0 | '-' } = {};
         let totalDays = 0;
@@ -246,6 +256,7 @@ const AttendanceReport: React.FC = () => {
         // IMPORTANT: Only iterate over the FILTERED columns
         columns.forEach(assessment => {
           const value = getAttendanceValue(
+            attendanceLookup,
             student.id,
             assessment.date,
             assessment.trainerId,
@@ -263,7 +274,7 @@ const AttendanceReport: React.FC = () => {
         });
 
         const attendanceRate = totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 0;
-        const group = groups.find(g => g.id === student.groupId);
+        const group = groupLookup.get(student.groupId);
 
         return {
           studentId: student.id,
@@ -281,7 +292,7 @@ const AttendanceReport: React.FC = () => {
 
       setReportData(gridData);
 
-      // Step 8: Calculate summary statistics
+      // Step 10: Calculate summary statistics
       const totalStudents = gridData.length;
       const totalAssessments = columns.length;
       const avgAttendanceRate =
@@ -357,12 +368,8 @@ const AttendanceReport: React.FC = () => {
     }
   }, [selectedYear, selectedGroup, groups]);
 
-  // Auto-generate report on load
-  useEffect(() => {
-    if (!loading) {
-      generateAttendanceReport();
-    }
-  }, []);
+  // Don't auto-generate on load - let user click the button to avoid freezing
+  // with large datasets
 
   if (loading) {
     return (
