@@ -82,8 +82,11 @@ const AdminReport: React.FC = () => {
     return true;
   });
 
+  // Build group lookup map for O(1) access
+  const groupLookup = React.useMemo(() => new Map(groups.map(g => [g.id, g])), [groups]);
+
   const getGroupName = (groupId: string) => {
-    const group = groups.find(g => g.id === groupId);
+    const group = groupLookup.get(groupId);
     return group ? group.name : 'Unknown Group';
   };
 
@@ -192,28 +195,60 @@ const AdminReport: React.FC = () => {
 
       setUniqueAssessments(sortedAssessments);
 
+      // PRE-BUILD LOOKUP MAPS for O(1) access instead of O(n) filtering
+      // Group assessments by studentId for fast lookup
+      const assessmentsByStudent = new Map<string, typeof groupFilteredAssessments>();
+      groupFilteredAssessments.forEach(a => {
+        if (!assessmentsByStudent.has(a.studentId)) {
+          assessmentsByStudent.set(a.studentId, []);
+        }
+        assessmentsByStudent.get(a.studentId)!.push(a);
+      });
+
+      // Group assessments by groupId for fast lookup
+      const assessmentsByGroup = new Map<string, typeof groupFilteredAssessments>();
+      groupFilteredAssessments.forEach(a => {
+        if (!assessmentsByGroup.has(a.groupId)) {
+          assessmentsByGroup.set(a.groupId, []);
+        }
+        assessmentsByGroup.get(a.groupId)!.push(a);
+      });
+
+      // Group attendance by studentId for fast lookup
+      const attendanceByStudent = new Map<string, typeof groupFilteredAttendance>();
+      groupFilteredAttendance.forEach(a => {
+        if (!attendanceByStudent.has(a.studentId)) {
+          attendanceByStudent.set(a.studentId, []);
+        }
+        attendanceByStudent.get(a.studentId)!.push(a);
+      });
+
+      // Pre-compute assessment dates per group
+      const assessmentDatesByGroup = new Map<string, Set<string>>();
+      groupFilteredAssessments.forEach(a => {
+        if (!assessmentDatesByGroup.has(a.groupId)) {
+          assessmentDatesByGroup.set(a.groupId, new Set());
+        }
+        assessmentDatesByGroup.get(a.groupId)!.add(a.date);
+      });
+
       // Generate summary report data
       // IMPORTANT: Absent students are counted as 0% for missed assessments
       const reportData = filteredStudents.map(student => {
-        // Get assessment dates specific to this student's group
-        const studentGroupAssessmentDates = new Set(
-          groupFilteredAssessments
-            .filter(a => a.groupId === student.groupId)
-            .map(a => a.date)
-        );
+        // Get assessment dates specific to this student's group (O(1) lookup)
+        const studentGroupAssessmentDates = assessmentDatesByGroup.get(student.groupId) || new Set<string>();
 
-        // Only count attendance records on dates when student's group had assessments
-        const studentAttendance = groupFilteredAttendance.filter(a =>
-          a.studentId === student.id && studentGroupAssessmentDates.has(a.date)
-        );
-        const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
+        // Get student's attendance and assessments (O(1) lookup)
+        const allStudentAttendance = attendanceByStudent.get(student.id) || [];
+        const studentAttendance = allStudentAttendance.filter(a => studentGroupAssessmentDates.has(a.date));
+        const studentAssessments = assessmentsByStudent.get(student.id) || [];
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
         // Fallback chain: assessment unit -> student unit -> group's currentUnit -> ''
         const latestAssessment = studentAssessments.length > 0
           ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
           : null;
-        const studentGroup = groups.find(g => g.id === student.groupId);
+        const studentGroup = groupLookup.get(student.groupId);
         const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '';
 
         // Calculate student-specific stats
@@ -232,16 +267,15 @@ const AdminReport: React.FC = () => {
         let totalMaxScore = scoredAssessments.reduce((sum, a) => sum + a.maxScore, 0);
         let totalAssessmentCount = scoredAssessments.length;
 
-        // Find unique assessment sessions for this student's group (by date + name + type)
+        // Find unique assessment sessions for this student's group (by date + name + type) - using pre-built lookup
         const allAssessmentSessions = new Map<string, { date: string; maxScore: number }>();
-        groupFilteredAssessments
-          .filter(a => a.groupId === student.groupId)
-          .forEach(a => {
-            const key = `${a.date}_${a.assessmentName}_${a.assessmentType}`;
-            if (!allAssessmentSessions.has(key)) {
-              allAssessmentSessions.set(key, { date: a.date, maxScore: a.maxScore });
-            }
-          });
+        const groupAssessments = assessmentsByGroup.get(student.groupId) || [];
+        groupAssessments.forEach(a => {
+          const key = `${a.date}_${a.assessmentName}_${a.assessmentType}`;
+          if (!allAssessmentSessions.has(key)) {
+            allAssessmentSessions.set(key, { date: a.date, maxScore: a.maxScore });
+          }
+        });
 
         // Check for assessments the student missed due to absence
         allAssessmentSessions.forEach((session, key) => {
@@ -284,26 +318,22 @@ const AdminReport: React.FC = () => {
 
       // Generate detailed report data with individual assessment scores
       // IMPORTANT: Absent students are shown with 0 score and marked as absent
+      // Re-use the lookup maps we built above
       const detailedData = filteredStudents.map((student, index) => {
-        // Get assessment dates specific to this student's group
-        const studentGroupAssessmentDates = new Set(
-          groupFilteredAssessments
-            .filter(a => a.groupId === student.groupId)
-            .map(a => a.date)
-        );
+        // Get assessment dates specific to this student's group (O(1) lookup)
+        const studentGroupAssessmentDates = assessmentDatesByGroup.get(student.groupId) || new Set<string>();
 
-        // Only count attendance records on dates when student's group had assessments
-        const studentAttendance = groupFilteredAttendance.filter(a =>
-          a.studentId === student.id && studentGroupAssessmentDates.has(a.date)
-        );
-        const studentAssessments = groupFilteredAssessments.filter(a => a.studentId === student.id);
+        // Get student's attendance and assessments (O(1) lookup)
+        const allStudentAttendance = attendanceByStudent.get(student.id) || [];
+        const studentAttendance = allStudentAttendance.filter(a => studentGroupAssessmentDates.has(a.date));
+        const studentAssessments = assessmentsByStudent.get(student.id) || [];
 
         // Get the unit from the most recent assessment for this student (trainer's selection takes priority)
         // Fallback chain: assessment unit -> student unit -> group's currentUnit -> '-'
         const latestAssessment = studentAssessments.length > 0
           ? studentAssessments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
           : null;
-        const studentGroup = groups.find(g => g.id === student.groupId);
+        const studentGroup = groupLookup.get(student.groupId);
         const studentUnit = latestAssessment?.unit || student.unit || studentGroup?.currentUnit || '-';
 
         // Calculate student-specific stats
@@ -340,14 +370,12 @@ const AdminReport: React.FC = () => {
         });
 
         // Then, check for assessments missed due to absence and add as 0
-        // Only check assessments that belong to this student's group
+        // Only check assessments that belong to this student's group - use pre-built lookup
+        const studentGroupAssessments = assessmentsByGroup.get(student.groupId) || [];
+        const studentGroupAssessmentKeys = new Set(studentGroupAssessments.map(a => getAssessmentKey(a)));
+
         sortedAssessments
-          .filter(assessment => {
-            // Check if this assessment exists for student's group (by week for Y2/3)
-            return groupFilteredAssessments.some(
-              a => a.groupId === student.groupId && getAssessmentKey(a) === assessment.key
-            );
-          })
+          .filter(assessment => studentGroupAssessmentKeys.has(assessment.key))
           .forEach(assessment => {
             const key = assessment.key;
             if (!scoresMap[key]) {
