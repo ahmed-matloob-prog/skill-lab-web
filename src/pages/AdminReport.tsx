@@ -511,7 +511,7 @@ const AdminReport: React.FC = () => {
         averageScore: 0,
       });
     }
-  }, [selectedYear, selectedGroup, students, groups, attendance, assessments]);
+  }, [selectedYear, selectedGroup, selectedUnit, students, groups, attendance, assessments]);
 
   if (user?.role !== 'admin') {
     return (
