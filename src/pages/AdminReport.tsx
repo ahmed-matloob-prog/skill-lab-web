@@ -69,10 +69,13 @@ const AdminReport: React.FC = () => {
   const units = ['MSK', 'HEM', 'CVS', 'Resp', 'GIT', 'GUT', 'Neuro', 'END'];
 
   // Filter students based on selected filters
+  // Note: Unit filtering for students is handled inside generateGrandReport based on assessments
+  // because students may not have a direct unit field - their unit is derived from assessments
   const filteredStudents = students.filter(student => {
     if (selectedYear !== 'all' && student.year !== selectedYear) return false;
     if (selectedGroup !== 'all' && student.groupId !== selectedGroup) return false;
-    if (selectedUnit && student.unit !== selectedUnit) return false;
+    // Unit filtering is done after we filter assessments, not here
+    // Students are included if they have assessments in the selected unit
     return true;
   });
 
@@ -123,8 +126,21 @@ const AdminReport: React.FC = () => {
         filteredAssessments.filter(a => a.groupId === selectedGroup) : filteredAssessments;
 
       // Filter assessments by unit if selected
+      // Special handling for MSK (Year 2) and GIT (Year 3): include untagged assessments
+      // because unit selection wasn't mandatory initially for these units
       if (selectedUnit) {
-        groupFilteredAssessments = groupFilteredAssessments.filter(a => a.unit === selectedUnit);
+        groupFilteredAssessments = groupFilteredAssessments.filter(a => {
+          // Exact match for the selected unit
+          if (a.unit === selectedUnit) return true;
+
+          // For MSK: include untagged Year 2 assessments (legacy data)
+          if (selectedUnit === 'MSK' && !a.unit && a.year === 2) return true;
+
+          // For GIT: include untagged Year 3 assessments (legacy data)
+          if (selectedUnit === 'GIT' && !a.unit && a.year === 3) return true;
+
+          return false;
+        });
       }
 
       // Calculate summary statistics
