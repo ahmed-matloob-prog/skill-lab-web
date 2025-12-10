@@ -426,9 +426,10 @@ class FirebaseSyncService {
 
   /**
    * Sync assessment record to Firebase
+   * Returns true if sync was successful (immediately synced to Firebase)
    */
-  async syncAssessment(record: AssessmentRecord): Promise<void> {
-    if (!this.isAvailable()) return;
+  async syncAssessment(record: AssessmentRecord): Promise<boolean> {
+    if (!this.isAvailable()) return false;
 
     const assessmentData = {
       ...record,
@@ -440,12 +441,15 @@ class FirebaseSyncService {
         const docRef = doc(db!, COLLECTIONS.ASSESSMENTS, record.id);
         await setDoc(docRef, assessmentData, { merge: true });
         logger.log(`FirebaseSync: Assessment synced - ${record.id}`);
+        return true; // Successfully synced
       } else {
         this.queueOperation(COLLECTIONS.ASSESSMENTS, 'update', record.id, assessmentData);
+        return false; // Queued, not immediately synced
       }
     } catch (error) {
       logger.error('FirebaseSync: Error syncing assessment:', error);
       this.queueOperation(COLLECTIONS.ASSESSMENTS, 'update', record.id, assessmentData);
+      return false; // Failed, queued for retry
     }
   }
 

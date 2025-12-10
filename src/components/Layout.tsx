@@ -138,7 +138,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     setClearDataDialogOpen(true);
   };
 
+  // Check if it's safe to clear local data (all data synced to cloud)
+  const isSafeToSync = syncStatus === 'online' && pendingSyncCount === 0;
+
   const handleClearDataConfirm = async () => {
+    // Double-check sync status before clearing
+    if (!isSafeToSync) {
+      setSnackbar({
+        open: true,
+        message: 'Cannot clear data while sync is pending. Please wait for sync to complete.',
+        severity: 'error'
+      });
+      return;
+    }
+
     try {
       await clearAllData();
       setClearDataDialogOpen(false);
@@ -381,6 +394,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           Clear Local Data?
         </DialogTitle>
         <DialogContent>
+          {!isSafeToSync ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <strong>Cannot clear data now!</strong>
+              <br />
+              {syncStatus === 'offline'
+                ? 'You are offline. Please connect to the internet first to ensure your data is synced.'
+                : syncStatus === 'syncing'
+                ? `${pendingSyncCount} items are still syncing to the cloud. Please wait for sync to complete.`
+                : 'There is a sync error. Please resolve it before clearing local data.'}
+            </Alert>
+          ) : (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              All data is synced to the cloud. Safe to clear local data.
+            </Alert>
+          )}
           <DialogContentText id="clear-data-dialog-description">
             This will clear all locally stored data from your browser. Your data is safely backed up in the cloud and will automatically re-sync after clearing.
             <br /><br />
@@ -391,7 +419,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Button onClick={() => setClearDataDialogOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleClearDataConfirm} color="warning" variant="contained" autoFocus>
+          <Button
+            onClick={handleClearDataConfirm}
+            color="warning"
+            variant="contained"
+            disabled={!isSafeToSync}
+            autoFocus
+          >
             Clear Data
           </Button>
         </DialogActions>

@@ -143,8 +143,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         logger.log('DatabaseContext: Firebase available - syncing data');
         syncFromFirebase();
 
-        // Subscribe to real-time updates for multi-user collaboration
-        setupRealtimeListeners();
+        // DISABLED: Real-time listeners cause excessive Firebase reads (1.8M reads/day)
+        // which exceeds the free tier limit of 50K reads/day.
+        // The app will still sync:
+        // - On app load (syncFromFirebase above)
+        // - When making changes (each operation syncs to Firebase)
+        // Users just won't see real-time updates from other users until they refresh.
+        // To re-enable (if on Blaze plan), uncomment: setupRealtimeListeners();
       } else {
         logger.log('DatabaseContext: Firebase not configured - using localStorage only');
       }
@@ -238,33 +243,47 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   /**
    * Setup real-time listeners for multi-user collaboration
+   * Uses conflict resolution to merge Firebase updates with local data
+   * to prevent data loss from unsynced local changes
    */
   const setupRealtimeListeners = () => {
-    // Subscribe to students
+    // Subscribe to students with conflict resolution
     FirebaseSyncService.subscribeToStudents((firebaseStudents) => {
-      localStorage.setItem('students', JSON.stringify(firebaseStudents));
-      setStudents(firebaseStudents);
+      const localStudents = JSON.parse(localStorage.getItem('students') || '[]');
+      const mergedStudents = mergeDataWithConflictResolution(localStudents, firebaseStudents);
+      localStorage.setItem('students', JSON.stringify(mergedStudents));
+      setStudents(mergedStudents);
+      logger.log(`DatabaseContext: Merged ${firebaseStudents.length} Firebase students with ${localStudents.length} local`);
     });
 
-    // Subscribe to groups
+    // Subscribe to groups with conflict resolution
     FirebaseSyncService.subscribeToGroups((firebaseGroups) => {
-      localStorage.setItem('groups', JSON.stringify(firebaseGroups));
-      setGroups(firebaseGroups);
+      const localGroups = JSON.parse(localStorage.getItem('groups') || '[]');
+      const mergedGroups = mergeDataWithConflictResolution(localGroups, firebaseGroups);
+      localStorage.setItem('groups', JSON.stringify(mergedGroups));
+      setGroups(mergedGroups);
+      logger.log(`DatabaseContext: Merged ${firebaseGroups.length} Firebase groups with ${localGroups.length} local`);
     });
 
-    // Subscribe to attendance
+    // Subscribe to attendance with conflict resolution
     FirebaseSyncService.subscribeToAttendance((firebaseAttendance) => {
-      localStorage.setItem('attendance', JSON.stringify(firebaseAttendance));
-      setAttendance(firebaseAttendance);
+      const localAttendance = JSON.parse(localStorage.getItem('attendance') || '[]');
+      const mergedAttendance = mergeDataWithConflictResolution(localAttendance, firebaseAttendance);
+      localStorage.setItem('attendance', JSON.stringify(mergedAttendance));
+      setAttendance(mergedAttendance);
+      logger.log(`DatabaseContext: Merged ${firebaseAttendance.length} Firebase attendance with ${localAttendance.length} local`);
     });
 
-    // Subscribe to assessments
+    // Subscribe to assessments with conflict resolution
     FirebaseSyncService.subscribeToAssessments((firebaseAssessments) => {
-      localStorage.setItem('assessments', JSON.stringify(firebaseAssessments));
-      setAssessments(firebaseAssessments);
+      const localAssessments = JSON.parse(localStorage.getItem('assessments') || '[]');
+      const mergedAssessments = mergeDataWithConflictResolution(localAssessments, firebaseAssessments);
+      localStorage.setItem('assessments', JSON.stringify(mergedAssessments));
+      setAssessments(mergedAssessments);
+      logger.log(`DatabaseContext: Merged ${firebaseAssessments.length} Firebase assessments with ${localAssessments.length} local`);
     });
 
-    logger.log('DatabaseContext: Real-time listeners established');
+    logger.log('DatabaseContext: Real-time listeners established with conflict resolution');
   };
 
   // Student operations
@@ -436,12 +455,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const id = await DatabaseService.addAssessmentRecord(record);
     await refreshAssessments();
 
-    // Sync to Firebase in background
+    // Sync to Firebase in background and mark as synced if successful
     const fullRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === id));
     if (fullRecord) {
-      FirebaseSyncService.syncAssessment(fullRecord).catch(error => {
-        logger.error('Error syncing assessment to Firebase:', error);
-      });
+      FirebaseSyncService.syncAssessment(fullRecord)
+        .then(async (synced) => {
+          if (synced) {
+            // Mark as synced in localStorage
+            await DatabaseService.markAssessmentsSynced([id]);
+            logger.log(`DatabaseContext: Assessment ${id} marked as synced`);
+          }
+        })
+        .catch(error => {
+          logger.error('Error syncing assessment to Firebase:', error);
+        });
     }
 
     return id;
@@ -452,12 +479,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await DatabaseService.updateAssessmentRecord(id, updates);
     await refreshAssessments();
 
-    // Sync to Firebase in background
+    // Sync to Firebase in background and mark as synced if successful
     const updatedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === id));
     if (updatedRecord) {
-      FirebaseSyncService.syncAssessment(updatedRecord).catch(error => {
-        logger.error('Error syncing assessment to Firebase:', error);
-      });
+      FirebaseSyncService.syncAssessment(updatedRecord)
+        .then(async (synced) => {
+          if (synced) {
+            // Mark as synced in localStorage
+            await DatabaseService.markAssessmentsSynced([id]);
+            logger.log(`DatabaseContext: Assessment ${id} marked as synced after update`);
+          }
+        })
+        .catch(error => {
+          logger.error('Error syncing assessment to Firebase:', error);
+        });
     }
   };
 
@@ -485,12 +520,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await DatabaseService.exportAssessmentToAdmin(assessmentId, trainerId);
     await refreshAssessments();
 
-    // Sync to Firebase in background
+    // Sync to Firebase in background and mark as synced if successful
     const exportedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
     if (exportedRecord) {
-      FirebaseSyncService.syncAssessment(exportedRecord).catch(error => {
-        logger.error('Error syncing exported assessment to Firebase:', error);
-      });
+      FirebaseSyncService.syncAssessment(exportedRecord)
+        .then(async (synced) => {
+          if (synced) {
+            await DatabaseService.markAssessmentsSynced([assessmentId]);
+          }
+        })
+        .catch(error => {
+          logger.error('Error syncing exported assessment to Firebase:', error);
+        });
     }
   };
 
@@ -501,15 +542,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const result = await DatabaseService.exportMultipleAssessmentsToAdmin(assessmentIds, trainerId);
     await refreshAssessments();
 
-    // Sync all exported assessments to Firebase in background
+    // Sync all exported assessments to Firebase in background and mark as synced
     const exportedRecords = await DatabaseService.getAssessmentRecords().then(assessments =>
       assessments.filter(a => assessmentIds.includes(a.id))
     );
 
     exportedRecords.forEach(record => {
-      FirebaseSyncService.syncAssessment(record).catch(error => {
-        logger.error(`Error syncing exported assessment ${record.id} to Firebase:`, error);
-      });
+      FirebaseSyncService.syncAssessment(record)
+        .then(async (synced) => {
+          if (synced) {
+            await DatabaseService.markAssessmentsSynced([record.id]);
+          }
+        })
+        .catch(error => {
+          logger.error(`Error syncing exported assessment ${record.id} to Firebase:`, error);
+        });
     });
 
     return result;
@@ -519,12 +566,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await DatabaseService.adminExportAssessment(assessmentId, adminId);
     await refreshAssessments();
 
-    // Sync to Firebase in background
+    // Sync to Firebase in background and mark as synced if successful
     const exportedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
     if (exportedRecord) {
-      FirebaseSyncService.syncAssessment(exportedRecord).catch(error => {
-        logger.error('Error syncing admin-exported assessment to Firebase:', error);
-      });
+      FirebaseSyncService.syncAssessment(exportedRecord)
+        .then(async (synced) => {
+          if (synced) {
+            await DatabaseService.markAssessmentsSynced([assessmentId]);
+          }
+        })
+        .catch(error => {
+          logger.error('Error syncing admin-exported assessment to Firebase:', error);
+        });
     }
   };
 
@@ -532,12 +585,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await DatabaseService.unlockAssessment(assessmentId, adminId);
     await refreshAssessments();
 
-    // Sync to Firebase in background
+    // Sync to Firebase in background and mark as synced if successful
     const unlockedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
     if (unlockedRecord) {
-      FirebaseSyncService.syncAssessment(unlockedRecord).catch(error => {
-        logger.error('Error syncing unlocked assessment to Firebase:', error);
-      });
+      FirebaseSyncService.syncAssessment(unlockedRecord)
+        .then(async (synced) => {
+          if (synced) {
+            await DatabaseService.markAssessmentsSynced([assessmentId]);
+          }
+        })
+        .catch(error => {
+          logger.error('Error syncing unlocked assessment to Firebase:', error);
+        });
     }
   };
 
@@ -553,12 +612,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await DatabaseService.markAssessmentReviewedByAdmin(assessmentId, adminId);
     await refreshAssessments();
 
-    // Sync to Firebase in background
+    // Sync to Firebase in background and mark as synced if successful
     const reviewedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
     if (reviewedRecord) {
-      FirebaseSyncService.syncAssessment(reviewedRecord).catch(error => {
-        logger.error('Error syncing reviewed assessment to Firebase:', error);
-      });
+      FirebaseSyncService.syncAssessment(reviewedRecord)
+        .then(async (synced) => {
+          if (synced) {
+            await DatabaseService.markAssessmentsSynced([assessmentId]);
+          }
+        })
+        .catch(error => {
+          logger.error('Error syncing reviewed assessment to Firebase:', error);
+        });
     }
   };
 
