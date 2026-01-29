@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd Clear Local Data button and fix storage quota error handling\n\n- Add safeLocalStorageSet helper to catch QuotaExceededError with user-friendly message\n- Add \"Clear Local Data\" button in user profile menu\n- Add confirmation dialog explaining data will re-sync from cloud\n- Auto-reload page after clearing to trigger Firebase re-sync\n\nFixes storage quota exceeded errors for trainers with full browser storage.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

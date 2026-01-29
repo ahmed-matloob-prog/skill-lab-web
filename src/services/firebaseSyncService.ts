@@ -474,19 +474,38 @@ class FirebaseSyncService {
   }
 
   /**
-   * Fetch all assessment records from Firebase
+   * Fetch all assessment records from Firebase with retry logic
    */
-  async fetchAssessments(): Promise<AssessmentRecord[]> {
-    if (!this.isAvailable() || !this.isOnline) return [];
+  async fetchAssessments(retryCount = 0): Promise<AssessmentRecord[]> {
+    if (!this.isAvailable() || !this.isOnline) {
+      logger.log('FirebaseSync: fetchAssessments - not available or offline');
+      return [];
+    }
+
+    const MAX_RETRIES = 3;
 
     try {
+      logger.log(`FirebaseSync: Fetching assessments (attempt ${retryCount + 1})...`);
       const collectionRef = collection(db!, COLLECTIONS.ASSESSMENTS);
       const snapshot = await getDocs(collectionRef);
-      const assessments = snapshot.docs.map(doc => doc.data() as AssessmentRecord);
-      logger.log(`FirebaseSync: Fetched ${assessments.length} assessment records`);
+      const assessments = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Ensure the id is set from the document
+        return { ...data, id: data.id || doc.id } as AssessmentRecord;
+      });
+      logger.log(`FirebaseSync: Successfully fetched ${assessments.length} assessment records`);
       return assessments;
-    } catch (error) {
-      logger.error('FirebaseSync: Error fetching assessments:', error);
+    } catch (error: any) {
+      logger.error(`FirebaseSync: Error fetching assessments (attempt ${retryCount + 1}):`, error?.message || error);
+
+      // Retry on failure
+      if (retryCount < MAX_RETRIES) {
+        logger.log(`FirebaseSync: Retrying assessments fetch in 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return this.fetchAssessments(retryCount + 1);
+      }
+
+      logger.error('FirebaseSync: All retry attempts failed for assessments');
       return [];
     }
   }

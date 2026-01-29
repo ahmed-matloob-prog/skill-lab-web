@@ -1,0 +1,9 @@
+@echo off
+set REACT_APP_FIREBASE_API_KEY=AIzaSyApEBRc07MYMkSrti3MhcMaxIJOEHKkH6c
+set REACT_APP_FIREBASE_AUTH_DOMAIN=skill-lab-web.firebaseapp.com
+set REACT_APP_FIREBASE_PROJECT_ID=skill-lab-web
+set REACT_APP_FIREBASE_STORAGE_BUCKET=skill-lab-web.firebasestorage.app
+set REACT_APP_FIREBASE_MESSAGING_SENDER_ID=437137958471
+set REACT_APP_FIREBASE_APP_ID=1:437137958471:web:89e99a4fddbc490d98f362
+node scripts/exportFirebaseData.cjs
+pause

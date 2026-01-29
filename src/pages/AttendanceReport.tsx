@@ -37,16 +37,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../utils/logger';
 import { exportAttendanceGridToExcel } from '../utils/excelUtils';
 
-interface AssessmentColumn {
-  assessmentId: string;
-  assessmentName: string;
-  assessmentType: string;
-  maxScore: number;
-  date: string;
-  trainerId: string;
+interface AttendanceColumn {
+  columnKey: string;        // Unique key for the column
+  unit: string;             // Unit name (MSK, HEM, etc.) or '-' for Year 1
+  week: number | null;      // Week number (1-10) or null for Year 1
+  date: string;             // Date (used for Year 1 or as reference)
   groupId: string;
-  unit: string;
-  week?: number;
+  trainerId: string;
+  displayName: string;      // What to show in header (e.g., "MSK-W1" or date)
 }
 
 interface AttendanceGridData {
@@ -55,7 +53,7 @@ interface AttendanceGridData {
   studentIdNumber: string;
   groupName: string;
   year: number;
-  attendanceByAssessment: { [assessmentId: string]: 1 | 0 | '-' };
+  attendanceByColumn: { [columnKey: string]: 1 | 0 | '-' };
   totalDays: number;
   presentCount: number;
   absentCount: number;
@@ -75,7 +73,7 @@ const AttendanceReport: React.FC = () => {
 
   // Report data states
   const [reportData, setReportData] = useState<AttendanceGridData[]>([]);
-  const [assessmentColumns, setAssessmentColumns] = useState<AssessmentColumn[]>([]);
+  const [attendanceColumns, setAttendanceColumns] = useState<AttendanceColumn[]>([]);
   const [summaryStats, setSummaryStats] = useState({
     totalStudents: 0,
     totalAssessments: 0,
@@ -114,6 +112,7 @@ const AttendanceReport: React.FC = () => {
     : accessibleGroups.filter(group => group.year === selectedYear);
 
   // Build attendance lookup map for O(1) access instead of O(n) search
+  // Key format: studentId|date|trainerId|groupId
   const buildAttendanceLookup = () => {
     const lookup = new Map<string, 1 | 0 | '-'>();
     attendance.forEach(a => {
@@ -126,15 +125,15 @@ const AttendanceReport: React.FC = () => {
     return lookup;
   };
 
-  // Get attendance value using the lookup map
+  // Get attendance value for a student and column
+  // For Year 2/3: looks up by the assessment date associated with that unit-week
+  // For Year 1: looks up by date directly
   const getAttendanceValue = (
     attendanceLookup: Map<string, 1 | 0 | '-'>,
     studentId: string,
-    assessmentDate: string,
-    assessmentTrainerId: string,
-    assessmentGroupId: string
+    column: AttendanceColumn
   ): 1 | 0 | '-' => {
-    const key = `${studentId}|${assessmentDate}|${assessmentTrainerId}|${assessmentGroupId}`;
+    const key = `${studentId}|${column.date}|${column.trainerId}|${column.groupId}`;
     return attendanceLookup.get(key) || '-';
   };
 
@@ -150,6 +149,9 @@ const AttendanceReport: React.FC = () => {
         setLoadingReport(false);
         return;
       }
+
+      // Determine if we're using unit-week grouping (Year 2/3) or date-based (Year 1)
+      const useUnitWeekGrouping = selectedYear === 2 || selectedYear === 3;
 
       // Step 1: Filter assessments by permissions
       let filteredAssessments = assessments.filter(a => {
@@ -184,38 +186,53 @@ const AttendanceReport: React.FC = () => {
         return true;
       });
 
-      // Step 3: Sort by date (chronological)
-      filteredAssessments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // Step 4: Deduplicate assessments by unique characteristics
-      // Since each assessment is saved per student, we need to group by name+date+type+group
-      const uniqueAssessmentsMap = new Map<string, typeof filteredAssessments[0]>();
+      // Step 3: Create unique columns based on unit-week (Year 2/3) or date (Year 1)
+      const uniqueColumnsMap = new Map<string, typeof filteredAssessments[0]>();
       filteredAssessments.forEach(a => {
-        // Create a unique key based on assessment characteristics
-        const key = `${a.assessmentName}|${a.date}|${a.assessmentType}|${a.groupId}|${a.trainerId}`;
+        let key: string;
+        if (useUnitWeekGrouping && a.unit && a.week) {
+          // Year 2/3: Group by unit + week + groupId
+          key = `${a.unit}|${a.week}|${a.groupId}`;
+        } else {
+          // Year 1 or assessments without unit/week: Group by date + groupId
+          key = `${a.date}|${a.groupId}`;
+        }
 
-        // Only keep the first occurrence of each unique assessment
-        if (!uniqueAssessmentsMap.has(key)) {
-          uniqueAssessmentsMap.set(key, a);
+        // Keep the first occurrence (to get the date for attendance lookup)
+        if (!uniqueColumnsMap.has(key)) {
+          uniqueColumnsMap.set(key, a);
         }
       });
 
-      const uniqueAssessments = Array.from(uniqueAssessmentsMap.values());
+      // Step 4: Create attendance columns from unique entries
+      const columnsUnsorted: AttendanceColumn[] = Array.from(uniqueColumnsMap.entries()).map(([key, a]) => {
+        const isUnitWeek = useUnitWeekGrouping && a.unit && a.week;
+        return {
+          columnKey: key,
+          unit: a.unit || '-',
+          week: a.week || null,
+          date: a.date,
+          groupId: a.groupId,
+          trainerId: a.trainerId,
+          displayName: isUnitWeek ? `${a.unit}-W${a.week}` : dayjs(a.date).format('MMM DD'),
+        };
+      });
 
-      // Step 5: Create assessment columns from unique assessments
-      const columns: AssessmentColumn[] = uniqueAssessments.map(a => ({
-        assessmentId: a.id,
-        assessmentName: a.assessmentName,
-        assessmentType: a.assessmentType,
-        maxScore: a.maxScore,
-        date: a.date,
-        trainerId: a.trainerId,
-        groupId: a.groupId,
-        unit: a.unit || '-',
-        week: a.week,
-      }));
+      // Step 5: Sort columns - by unit then week for Year 2/3, by date for Year 1
+      const columns = columnsUnsorted.sort((a, b) => {
+        if (useUnitWeekGrouping) {
+          // Sort by unit name first, then by week number
+          if (a.unit !== b.unit) {
+            return a.unit.localeCompare(b.unit);
+          }
+          return (a.week || 0) - (b.week || 0);
+        } else {
+          // Sort by date
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        }
+      });
 
-      setAssessmentColumns(columns);
+      setAttendanceColumns(columns);
 
       // Step 6: Filter students based on permissions and selections
       let filteredStudents = students.filter(student => {
@@ -231,7 +248,7 @@ const AttendanceReport: React.FC = () => {
         if (selectedYear !== 'all' && student.year !== selectedYear) return false;
         if (selectedGroup !== 'all' && student.groupId !== selectedGroup) return false;
 
-        // Filter by unit
+        // Filter by unit (check if group's current unit matches)
         if (selectedUnit !== 'all') {
           const studentGroup = groups.find(g => g.id === student.groupId);
           if (studentGroup?.currentUnit !== selectedUnit) return false;
@@ -248,22 +265,16 @@ const AttendanceReport: React.FC = () => {
 
       // Step 9: Build attendance grid data
       const gridData: AttendanceGridData[] = filteredStudents.map(student => {
-        const attendanceByAssessment: { [key: string]: 1 | 0 | '-' } = {};
+        const attendanceByColumn: { [key: string]: 1 | 0 | '-' } = {};
         let totalDays = 0;
         let presentCount = 0;
         let absentCount = 0;
 
-        // IMPORTANT: Only iterate over the FILTERED columns
-        columns.forEach(assessment => {
-          const value = getAttendanceValue(
-            attendanceLookup,
-            student.id,
-            assessment.date,
-            assessment.trainerId,
-            assessment.groupId
-          );
+        // Iterate over columns and get attendance for each
+        columns.forEach(column => {
+          const value = getAttendanceValue(attendanceLookup, student.id, column);
 
-          attendanceByAssessment[assessment.assessmentId] = value;
+          attendanceByColumn[column.columnKey] = value;
 
           // Only count if there's an actual record (not '-')
           if (value !== '-') {
@@ -282,7 +293,7 @@ const AttendanceReport: React.FC = () => {
           studentIdNumber: student.studentId,
           groupName: group ? group.name : 'Unknown',
           year: student.year,
-          attendanceByAssessment,
+          attendanceByColumn,
           totalDays,
           presentCount,
           absentCount,
@@ -294,7 +305,7 @@ const AttendanceReport: React.FC = () => {
 
       // Step 10: Calculate summary statistics
       const totalStudents = gridData.length;
-      const totalAssessments = columns.length;
+      const totalColumns = columns.length;
       const avgAttendanceRate =
         totalStudents > 0
           ? Math.round(gridData.reduce((sum, s) => sum + s.attendanceRate, 0) / totalStudents)
@@ -302,7 +313,7 @@ const AttendanceReport: React.FC = () => {
 
       setSummaryStats({
         totalStudents,
-        totalAssessments,
+        totalAssessments: totalColumns,
         averageAttendanceRate: avgAttendanceRate,
       });
     } catch (error) {
@@ -327,12 +338,32 @@ const AttendanceReport: React.FC = () => {
         selectedGroup !== 'all'
           ? groups.find(g => g.id === selectedGroup)?.name.replace(/\s+/g, '')
           : 'AllGroups';
+      const unitText = selectedUnit !== 'all' ? `_${selectedUnit}` : '';
       const monthText = startDate.format('MMM YYYY');
-      const filename = `Attendance_Assessment_Report_${yearText}_${groupText}_${monthText}`;
+      const filename = `Attendance_Report_${yearText}_${groupText}${unitText}_${monthText}`;
+
+      // Convert new column format to the format expected by excelUtils
+      const excelColumns = attendanceColumns.map(col => ({
+        assessmentId: col.columnKey,
+        assessmentName: col.displayName,
+        assessmentType: 'attendance' as const,
+        maxScore: 1,
+        date: col.date,
+        trainerId: col.trainerId,
+        groupId: col.groupId,
+        unit: col.unit,
+        week: col.week || undefined,
+      }));
+
+      // Convert grid data to use assessmentId key for compatibility
+      const excelData = reportData.map(row => ({
+        ...row,
+        attendanceByAssessment: row.attendanceByColumn,
+      }));
 
       exportAttendanceGridToExcel(
-        reportData,
-        assessmentColumns,
+        excelData,
+        excelColumns,
         startDate.format('MMM DD, YYYY'),
         endDate.format('MMM DD, YYYY'),
         filename
@@ -555,8 +586,8 @@ const AttendanceReport: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Assessment Attendance Grid ({reportData.length} students, {assessmentColumns.length}{' '}
-                assessments)
+                Attendance Grid ({reportData.length} students, {attendanceColumns.length}{' '}
+                {selectedYear === 2 || selectedYear === 3 ? 'weeks' : 'sessions'})
               </Typography>
               <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
                 <Table stickyHeader size="small">
@@ -610,13 +641,13 @@ const AttendanceReport: React.FC = () => {
                       >
                         Group
                       </TableCell>
-                      {assessmentColumns.map(assessment => (
+                      {attendanceColumns.map(column => (
                         <TableCell
-                          key={assessment.assessmentId}
+                          key={column.columnKey}
                           align="center"
                           sx={{ minWidth: 80 }}
                         >
-                          {assessment.assessmentName} ({assessment.maxScore})
+                          {column.displayName}
                         </TableCell>
                       ))}
                       <TableCell
@@ -649,13 +680,13 @@ const AttendanceReport: React.FC = () => {
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      {assessmentColumns.map(assessment => (
+                      {attendanceColumns.map(column => (
                         <TableCell
-                          key={`date-${assessment.assessmentId}`}
+                          key={`date-${column.columnKey}`}
                           align="center"
                           sx={{ minWidth: 80 }}
                         >
-                          {dayjs(assessment.date).format('MMM DD')}
+                          {dayjs(column.date).format('MMM DD')}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -703,18 +734,18 @@ const AttendanceReport: React.FC = () => {
                         >
                           {student.groupName}
                         </TableCell>
-                        {assessmentColumns.map(assessment => (
+                        {attendanceColumns.map(column => (
                           <TableCell
-                            key={assessment.assessmentId}
+                            key={column.columnKey}
                             align="center"
                             sx={{
                               backgroundColor: getCellColor(
-                                student.attendanceByAssessment[assessment.assessmentId]
+                                student.attendanceByColumn[column.columnKey]
                               ),
                               fontWeight: 'bold',
                             }}
                           >
-                            {student.attendanceByAssessment[assessment.assessmentId]}
+                            {student.attendanceByColumn[column.columnKey]}
                           </TableCell>
                         ))}
                         <TableCell align="center">{student.totalDays}</TableCell>

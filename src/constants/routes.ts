@@ -5,26 +5,17 @@
 
 export const ROUTES = {
   // Public Routes
-  LOGIN: '/',
+  LOGIN: '/login',
 
   // Private Routes
   DASHBOARD: '/dashboard',
   STUDENTS: '/students',
-  ATTENDANCE: '/attendance',
+  INPUT: '/input',
   ASSESSMENTS: '/assessments',
-  COMBINED_INPUT: '/combined-input',
-  ATTENDANCE_ASSESSMENT: '/attendance-assessment',
-  REPORTS: '/reports',
-  TRAINER_REPORTS: '/trainer-reports',
-  ADMIN_REPORTS: '/admin-reports',
-  SYNC: '/sync',
+  ATTENDANCE_REPORT: '/attendance-report',
 
   // Admin Only Routes
   ADMIN: '/admin',
-
-  // Error Routes
-  NOT_FOUND: '/404',
-  UNAUTHORIZED: '/unauthorized',
 } as const;
 
 export type RoutePath = typeof ROUTES[keyof typeof ROUTES];
@@ -33,13 +24,8 @@ export type RoutePath = typeof ROUTES[keyof typeof ROUTES];
 export const ROUTE_NAMES = {
   [ROUTES.DASHBOARD]: 'Dashboard',
   [ROUTES.STUDENTS]: 'Students',
-  [ROUTES.ATTENDANCE]: 'Attendance',
+  [ROUTES.INPUT]: 'Input Data',
   [ROUTES.ASSESSMENTS]: 'Assessments',
-  [ROUTES.COMBINED_INPUT]: 'Combined Input',
-  [ROUTES.ATTENDANCE_ASSESSMENT]: 'Attendance & Assessment',
-  [ROUTES.REPORTS]: 'Reports',
-  [ROUTES.TRAINER_REPORTS]: 'Trainer Reports',
-  [ROUTES.ADMIN_REPORTS]: 'Admin Reports',
-  [ROUTES.SYNC]: 'Sync',
+  [ROUTES.ATTENDANCE_REPORT]: 'Attendance Report',
   [ROUTES.ADMIN]: 'Admin Panel',
 } as const;

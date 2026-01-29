@@ -1,13 +1,14 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline, CircularProgress, Box } from '@mui/material';
+import { CssBaseline } from '@mui/material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { DatabaseProvider } from './contexts/DatabaseContext';
+import { DatabaseProvider, useDatabase } from './contexts/DatabaseContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import Layout from './components/Layout';
 import LoginForm from './components/LoginForm';
 import LoadingSpinner from './components/LoadingSpinner';
+import SyncProgressOverlay from './components/SyncProgressOverlay';
 import UpdateBanner from './components/UpdateBanner';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { USER_ROLES } from './constants';
@@ -105,10 +106,15 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 // Main App Component
 const AppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { syncProgress } = useDatabase();
   const { updateAvailable, applyUpdate, dismissUpdate } = useVersionCheck(300000); // Check every 5 minutes
 
   return (
     <>
+      <SyncProgressOverlay
+        syncProgress={syncProgress}
+        show={syncProgress.isInitialSync}
+      />
       <UpdateBanner
         open={updateAvailable}
         onUpdate={applyUpdate}

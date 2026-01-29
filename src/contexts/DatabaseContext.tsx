@@ -4,7 +4,32 @@ import FirebaseSyncService from '../services/firebaseSyncService';
 import { Student, Group, AttendanceRecord, AssessmentRecord } from '../types';
 import { logger } from '../utils/logger';
 
+/**
+ * Safe localStorage wrapper that handles quota exceeded errors
+ */
+const safeLocalStorageSet = (key: string, value: string): boolean => {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error: any) {
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      logger.error(`DatabaseContext: localStorage quota exceeded for key "${key}". Data will be kept in memory only.`);
+      // Data is still in React state, just not persisted to localStorage
+      return false;
+    }
+    logger.error(`DatabaseContext: Error saving to localStorage:`, error);
+    return false;
+  }
+};
+
 export type SyncStatus = 'online' | 'offline' | 'syncing' | 'error';
+
+export interface SyncProgress {
+  isInitialSync: boolean;
+  currentStep: string;
+  stepsCompleted: number;
+  totalSteps: number;
+}
 
 interface DatabaseContextType {
   // Data
@@ -17,6 +42,7 @@ interface DatabaseContextType {
   // Sync status
   syncStatus: SyncStatus;
   pendingSyncCount: number;
+  syncProgress: SyncProgress;
 
   // Student operations
   addStudent: (student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
@@ -100,6 +126,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
+    isInitialSync: false,
+    currentStep: '',
+    stepsCompleted: 0,
+    totalSteps: 4
+  });
 
   useEffect(() => {
     initializeDatabase();
@@ -141,15 +173,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // If Firebase is available, sync in background
       if (FirebaseSyncService.isAvailable()) {
         logger.log('DatabaseContext: Firebase available - syncing data');
-        syncFromFirebase();
 
-        // DISABLED: Real-time listeners cause excessive Firebase reads (1.8M reads/day)
-        // which exceeds the free tier limit of 50K reads/day.
-        // The app will still sync:
-        // - On app load (syncFromFirebase above)
-        // - When making changes (each operation syncs to Firebase)
-        // Users just won't see real-time updates from other users until they refresh.
-        // To re-enable (if on Blaze plan), uncomment: setupRealtimeListeners();
+        // First, do a full sync from Firebase and WAIT for it to complete
+        await syncFromFirebase();
+
+        // Only after initial sync is done, setup real-time listeners
+        // This prevents empty snapshots from overwriting data during initial load
+        setupRealtimeListeners();
       } else {
         logger.log('DatabaseContext: Firebase not configured - using localStorage only');
       }
@@ -199,45 +229,115 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   /**
    * Sync data from Firebase to localStorage with conflict resolution
+   * Fetches each collection separately to show real progress
    */
   const syncFromFirebase = async () => {
     try {
-      const firebaseData = await FirebaseSyncService.fetchAllFromFirebase();
+      // Read current localStorage data
+      const localStudents = JSON.parse(localStorage.getItem('students') || '[]');
+      const localGroups = JSON.parse(localStorage.getItem('groups') || '[]');
+      const localAttendance = JSON.parse(localStorage.getItem('attendance') || '[]');
+      const localAssessments = JSON.parse(localStorage.getItem('assessments') || '[]');
 
-      // Merge Firebase data with localStorage using conflict resolution
-      // Strategy: Last-write-wins based on updatedAt/timestamp
+      // Step 1: Fetch and merge students & groups
+      setSyncProgress({
+        isInitialSync: true,
+        currentStep: 'Fetching students & groups...',
+        stepsCompleted: 0,
+        totalSteps: 4
+      });
 
-      // Merge students
-      if (firebaseData.students.length > 0) {
-        const mergedStudents = mergeDataWithConflictResolution(students, firebaseData.students);
-        localStorage.setItem('students', JSON.stringify(mergedStudents));
+      const [firebaseStudents, firebaseGroups] = await Promise.all([
+        FirebaseSyncService.fetchStudents(),
+        FirebaseSyncService.fetchGroups()
+      ]);
+
+      setSyncProgress({
+        isInitialSync: true,
+        currentStep: `Syncing ${firebaseStudents.length} students & ${firebaseGroups.length} groups...`,
+        stepsCompleted: 1,
+        totalSteps: 4
+      });
+
+      if (firebaseStudents.length > 0) {
+        const mergedStudents = mergeDataWithConflictResolution(localStudents, firebaseStudents);
+        safeLocalStorageSet('students', JSON.stringify(mergedStudents));
         setStudents(mergedStudents);
+        logger.log(`DatabaseContext: Merged students: ${localStudents.length} local + ${firebaseStudents.length} firebase = ${mergedStudents.length} total`);
       }
 
-      // Merge groups
-      if (firebaseData.groups.length > 0) {
-        const mergedGroups = mergeDataWithConflictResolution(groups, firebaseData.groups);
-        localStorage.setItem('groups', JSON.stringify(mergedGroups));
+      if (firebaseGroups.length > 0) {
+        const mergedGroups = mergeDataWithConflictResolution(localGroups, firebaseGroups);
+        safeLocalStorageSet('groups', JSON.stringify(mergedGroups));
         setGroups(mergedGroups);
+        logger.log(`DatabaseContext: Merged groups: ${localGroups.length} local + ${firebaseGroups.length} firebase = ${mergedGroups.length} total`);
       }
 
-      // Merge attendance
-      if (firebaseData.attendance.length > 0) {
-        const mergedAttendance = mergeDataWithConflictResolution(attendance, firebaseData.attendance);
-        localStorage.setItem('attendance', JSON.stringify(mergedAttendance));
+      // Step 2: Fetch and merge attendance
+      setSyncProgress({
+        isInitialSync: true,
+        currentStep: 'Fetching attendance records...',
+        stepsCompleted: 1,
+        totalSteps: 4
+      });
+
+      const firebaseAttendance = await FirebaseSyncService.fetchAttendance();
+
+      setSyncProgress({
+        isInitialSync: true,
+        currentStep: `Syncing ${firebaseAttendance.length} attendance records...`,
+        stepsCompleted: 2,
+        totalSteps: 4
+      });
+
+      if (firebaseAttendance.length > 0) {
+        const mergedAttendance = mergeDataWithConflictResolution(localAttendance, firebaseAttendance);
+        safeLocalStorageSet('attendance', JSON.stringify(mergedAttendance));
         setAttendance(mergedAttendance);
+        logger.log(`DatabaseContext: Merged attendance: ${localAttendance.length} local + ${firebaseAttendance.length} firebase = ${mergedAttendance.length} total`);
       }
 
-      // Merge assessments
-      if (firebaseData.assessments.length > 0) {
-        const mergedAssessments = mergeDataWithConflictResolution(assessments, firebaseData.assessments);
-        localStorage.setItem('assessments', JSON.stringify(mergedAssessments));
+      // Step 3: Fetch and merge assessments (largest collection)
+      setSyncProgress({
+        isInitialSync: true,
+        currentStep: 'Fetching assessments (this may take a moment)...',
+        stepsCompleted: 2,
+        totalSteps: 4
+      });
+
+      const firebaseAssessments = await FirebaseSyncService.fetchAssessments();
+
+      setSyncProgress({
+        isInitialSync: true,
+        currentStep: `Syncing ${firebaseAssessments.length} assessments...`,
+        stepsCompleted: 3,
+        totalSteps: 4
+      });
+
+      if (firebaseAssessments.length > 0) {
+        const mergedAssessments = mergeDataWithConflictResolution(localAssessments, firebaseAssessments);
+        safeLocalStorageSet('assessments', JSON.stringify(mergedAssessments));
         setAssessments(mergedAssessments);
+        logger.log(`DatabaseContext: Merged assessments: ${localAssessments.length} local + ${firebaseAssessments.length} firebase = ${mergedAssessments.length} total`);
       }
+
+      // Step 4: Complete
+      setSyncProgress({
+        isInitialSync: false,
+        currentStep: 'Sync complete!',
+        stepsCompleted: 4,
+        totalSteps: 4
+      });
 
       logger.log('DatabaseContext: Firebase sync completed with conflict resolution');
     } catch (error) {
       logger.error('DatabaseContext: Error syncing from Firebase:', error);
+      setSyncProgress({
+        isInitialSync: false,
+        currentStep: 'Sync error',
+        stepsCompleted: 0,
+        totalSteps: 4
+      });
     }
   };
 
@@ -249,38 +349,55 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const setupRealtimeListeners = () => {
     // Subscribe to students with conflict resolution
     FirebaseSyncService.subscribeToStudents((firebaseStudents) => {
+      // Skip if Firebase returns empty but we have local data (prevents data loss)
       const localStudents = JSON.parse(localStorage.getItem('students') || '[]');
+      if (firebaseStudents.length === 0 && localStudents.length > 0) {
+        logger.log('DatabaseContext: Skipping empty Firebase students update (local has data)');
+        return;
+      }
       const mergedStudents = mergeDataWithConflictResolution(localStudents, firebaseStudents);
-      localStorage.setItem('students', JSON.stringify(mergedStudents));
+      safeLocalStorageSet('students', JSON.stringify(mergedStudents));
       setStudents(mergedStudents);
-      logger.log(`DatabaseContext: Merged ${firebaseStudents.length} Firebase students with ${localStudents.length} local`);
+      logger.log(`DatabaseContext: Merged ${firebaseStudents.length} Firebase students with ${localStudents.length} local = ${mergedStudents.length}`);
     });
 
     // Subscribe to groups with conflict resolution
     FirebaseSyncService.subscribeToGroups((firebaseGroups) => {
       const localGroups = JSON.parse(localStorage.getItem('groups') || '[]');
+      if (firebaseGroups.length === 0 && localGroups.length > 0) {
+        logger.log('DatabaseContext: Skipping empty Firebase groups update (local has data)');
+        return;
+      }
       const mergedGroups = mergeDataWithConflictResolution(localGroups, firebaseGroups);
-      localStorage.setItem('groups', JSON.stringify(mergedGroups));
+      safeLocalStorageSet('groups', JSON.stringify(mergedGroups));
       setGroups(mergedGroups);
-      logger.log(`DatabaseContext: Merged ${firebaseGroups.length} Firebase groups with ${localGroups.length} local`);
+      logger.log(`DatabaseContext: Merged ${firebaseGroups.length} Firebase groups with ${localGroups.length} local = ${mergedGroups.length}`);
     });
 
     // Subscribe to attendance with conflict resolution
     FirebaseSyncService.subscribeToAttendance((firebaseAttendance) => {
       const localAttendance = JSON.parse(localStorage.getItem('attendance') || '[]');
+      if (firebaseAttendance.length === 0 && localAttendance.length > 0) {
+        logger.log('DatabaseContext: Skipping empty Firebase attendance update (local has data)');
+        return;
+      }
       const mergedAttendance = mergeDataWithConflictResolution(localAttendance, firebaseAttendance);
-      localStorage.setItem('attendance', JSON.stringify(mergedAttendance));
+      safeLocalStorageSet('attendance', JSON.stringify(mergedAttendance));
       setAttendance(mergedAttendance);
-      logger.log(`DatabaseContext: Merged ${firebaseAttendance.length} Firebase attendance with ${localAttendance.length} local`);
+      logger.log(`DatabaseContext: Merged ${firebaseAttendance.length} Firebase attendance with ${localAttendance.length} local = ${mergedAttendance.length}`);
     });
 
     // Subscribe to assessments with conflict resolution
     FirebaseSyncService.subscribeToAssessments((firebaseAssessments) => {
       const localAssessments = JSON.parse(localStorage.getItem('assessments') || '[]');
+      if (firebaseAssessments.length === 0 && localAssessments.length > 0) {
+        logger.log('DatabaseContext: Skipping empty Firebase assessments update (local has data)');
+        return;
+      }
       const mergedAssessments = mergeDataWithConflictResolution(localAssessments, firebaseAssessments);
-      localStorage.setItem('assessments', JSON.stringify(mergedAssessments));
+      safeLocalStorageSet('assessments', JSON.stringify(mergedAssessments));
       setAssessments(mergedAssessments);
-      logger.log(`DatabaseContext: Merged ${firebaseAssessments.length} Firebase assessments with ${localAssessments.length} local`);
+      logger.log(`DatabaseContext: Merged ${firebaseAssessments.length} Firebase assessments with ${localAssessments.length} local = ${mergedAssessments.length}`);
     });
 
     logger.log('DatabaseContext: Real-time listeners established with conflict resolution');
@@ -353,11 +470,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const getStudentsByGroup = async (groupId: string): Promise<Student[]> => {
-    return await DatabaseService.getStudentsByGroup(groupId);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return students.filter(student => student.groupId === groupId);
   };
 
   const getStudentsByYear = async (year: number): Promise<Student[]> => {
-    return await DatabaseService.getStudentsByYear(year);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return students.filter(student => student.year === year);
   };
 
   // Group operations
@@ -403,7 +522,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const getGroupsByYear = async (year: number): Promise<Group[]> => {
-    return await DatabaseService.getGroupsByYear(year);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return groups.filter(group => group.year === year);
   };
 
   // Attendance operations
@@ -438,15 +558,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const getAttendanceByDate = async (date: string): Promise<AttendanceRecord[]> => {
-    return await DatabaseService.getAttendanceByDate(date);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return attendance.filter(record => record.date === date);
   };
 
   const getAttendanceByStudent = async (studentId: string): Promise<AttendanceRecord[]> => {
-    return await DatabaseService.getAttendanceByStudent(studentId);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return attendance.filter(record => record.studentId === studentId);
   };
 
   const getAttendanceByGroup = async (groupId: string, date?: string): Promise<AttendanceRecord[]> => {
-    return await DatabaseService.getAttendanceByGroup(groupId, date);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return attendance.filter(record => {
+      if (record.groupId !== groupId) return false;
+      if (date && record.date !== date) return false;
+      return true;
+    });
   };
 
   // Assessment operations
@@ -508,123 +635,214 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const getAssessmentsByStudent = async (studentId: string): Promise<AssessmentRecord[]> => {
-    return await DatabaseService.getAssessmentsByStudent(studentId);
+    // Use React state (which has data from Firebase) instead of localStorage
+    // This fixes issues when localStorage quota is exceeded
+    return assessments.filter(record => record.studentId === studentId);
   };
 
   const getAssessmentsByGroup = async (groupId: string): Promise<AssessmentRecord[]> => {
-    return await DatabaseService.getAssessmentsByGroup(groupId);
+    // Use React state (which has data from Firebase) instead of localStorage
+    // This fixes issues when localStorage quota is exceeded
+    return assessments.filter(record => record.groupId === groupId);
   };
 
   // Export to Admin operations
   const exportAssessmentToAdmin = async (assessmentId: string, trainerId: string): Promise<void> => {
-    await DatabaseService.exportAssessmentToAdmin(assessmentId, trainerId);
-    await refreshAssessments();
-
-    // Sync to Firebase in background and mark as synced if successful
-    const exportedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
-    if (exportedRecord) {
-      FirebaseSyncService.syncAssessment(exportedRecord)
-        .then(async (synced) => {
-          if (synced) {
-            await DatabaseService.markAssessmentsSynced([assessmentId]);
-          }
-        })
-        .catch(error => {
-          logger.error('Error syncing exported assessment to Firebase:', error);
-        });
+    // Find assessment in React state (not localStorage which may be empty)
+    const assessment = assessments.find(a => a.id === assessmentId);
+    if (!assessment) {
+      throw new Error('Assessment not found');
     }
+
+    // Validate: Must be the creator
+    if (assessment.trainerId !== trainerId) {
+      throw new Error('Only the creator can export this assessment');
+    }
+
+    // Validate: Must not be already exported
+    if (assessment.exportedToAdmin === true) {
+      throw new Error('Assessment already exported');
+    }
+
+    // Create updated record
+    const updatedAssessment: AssessmentRecord = {
+      ...assessment,
+      exportedToAdmin: true,
+      exportedAt: new Date().toISOString(),
+      exportedBy: trainerId,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: trainerId
+    };
+
+    // Update React state
+    setAssessments(prev => prev.map(a => a.id === assessmentId ? updatedAssessment : a));
+
+    // Try to save to localStorage (may fail due to quota)
+    safeLocalStorageSet('assessments', JSON.stringify(
+      assessments.map(a => a.id === assessmentId ? updatedAssessment : a)
+    ));
+
+    // Sync to Firebase
+    FirebaseSyncService.syncAssessment(updatedAssessment)
+      .then(synced => {
+        if (synced) {
+          logger.log(`Assessment ${assessmentId} exported and synced to Firebase`);
+        }
+      })
+      .catch(error => {
+        logger.error('Error syncing exported assessment to Firebase:', error);
+      });
+
+    logger.log(`Assessment ${assessmentId} exported to admin (locked)`);
   };
 
   const exportMultipleAssessmentsToAdmin = async (
     assessmentIds: string[],
     trainerId: string
   ): Promise<{ success: number; failed: number }> => {
-    const result = await DatabaseService.exportMultipleAssessmentsToAdmin(assessmentIds, trainerId);
-    await refreshAssessments();
+    let success = 0;
+    let failed = 0;
 
-    // Sync all exported assessments to Firebase in background and mark as synced
-    const exportedRecords = await DatabaseService.getAssessmentRecords().then(assessments =>
-      assessments.filter(a => assessmentIds.includes(a.id))
-    );
+    for (const id of assessmentIds) {
+      try {
+        await exportAssessmentToAdmin(id, trainerId);
+        success++;
+      } catch (error) {
+        logger.error(`Failed to export assessment ${id}:`, error);
+        failed++;
+      }
+    }
 
-    exportedRecords.forEach(record => {
-      FirebaseSyncService.syncAssessment(record)
-        .then(async (synced) => {
-          if (synced) {
-            await DatabaseService.markAssessmentsSynced([record.id]);
-          }
-        })
-        .catch(error => {
-          logger.error(`Error syncing exported assessment ${record.id} to Firebase:`, error);
-        });
-    });
-
-    return result;
+    return { success, failed };
   };
 
   const adminExportAssessment = async (assessmentId: string, adminId: string): Promise<void> => {
-    await DatabaseService.adminExportAssessment(assessmentId, adminId);
-    await refreshAssessments();
-
-    // Sync to Firebase in background and mark as synced if successful
-    const exportedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
-    if (exportedRecord) {
-      FirebaseSyncService.syncAssessment(exportedRecord)
-        .then(async (synced) => {
-          if (synced) {
-            await DatabaseService.markAssessmentsSynced([assessmentId]);
-          }
-        })
-        .catch(error => {
-          logger.error('Error syncing admin-exported assessment to Firebase:', error);
-        });
+    // Find assessment in React state (not localStorage which may be empty)
+    const assessment = assessments.find(a => a.id === assessmentId);
+    if (!assessment) {
+      throw new Error('Assessment not found');
     }
+
+    // Validate: Must not be already exported
+    if (assessment.exportedToAdmin === true) {
+      throw new Error('Assessment already exported');
+    }
+
+    // Create updated record (admin export uses same fields as trainer export)
+    const updatedAssessment: AssessmentRecord = {
+      ...assessment,
+      exportedToAdmin: true,
+      exportedAt: new Date().toISOString(),
+      exportedBy: adminId,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: adminId
+    };
+
+    // Update React state
+    setAssessments(prev => prev.map(a => a.id === assessmentId ? updatedAssessment : a));
+
+    // Try to save to localStorage (may fail due to quota)
+    safeLocalStorageSet('assessments', JSON.stringify(
+      assessments.map(a => a.id === assessmentId ? updatedAssessment : a)
+    ));
+
+    // Sync to Firebase
+    FirebaseSyncService.syncAssessment(updatedAssessment)
+      .then(synced => {
+        if (synced) {
+          logger.log(`Assessment ${assessmentId} admin-exported and synced to Firebase`);
+        }
+      })
+      .catch(error => {
+        logger.error('Error syncing admin-exported assessment to Firebase:', error);
+      });
   };
 
   const unlockAssessment = async (assessmentId: string, adminId: string): Promise<void> => {
-    await DatabaseService.unlockAssessment(assessmentId, adminId);
-    await refreshAssessments();
-
-    // Sync to Firebase in background and mark as synced if successful
-    const unlockedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
-    if (unlockedRecord) {
-      FirebaseSyncService.syncAssessment(unlockedRecord)
-        .then(async (synced) => {
-          if (synced) {
-            await DatabaseService.markAssessmentsSynced([assessmentId]);
-          }
-        })
-        .catch(error => {
-          logger.error('Error syncing unlocked assessment to Firebase:', error);
-        });
+    // Find assessment in React state (not localStorage which may be empty)
+    const assessment = assessments.find(a => a.id === assessmentId);
+    if (!assessment) {
+      throw new Error('Assessment not found');
     }
+
+    // Only unlock if currently exported
+    if (assessment.exportedToAdmin !== true) {
+      throw new Error('Assessment is not locked');
+    }
+
+    // Create updated record
+    const updatedAssessment: AssessmentRecord = {
+      ...assessment,
+      exportedToAdmin: false,
+      exportedAt: undefined,
+      exportedBy: undefined,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: adminId
+    };
+
+    // Update React state
+    setAssessments(prev => prev.map(a => a.id === assessmentId ? updatedAssessment : a));
+
+    // Try to save to localStorage (may fail due to quota)
+    safeLocalStorageSet('assessments', JSON.stringify(
+      assessments.map(a => a.id === assessmentId ? updatedAssessment : a)
+    ));
+
+    // Sync to Firebase
+    FirebaseSyncService.syncAssessment(updatedAssessment)
+      .then(synced => {
+        if (synced) {
+          logger.log(`Assessment ${assessmentId} unlocked and synced to Firebase`);
+        }
+      })
+      .catch(error => {
+        logger.error('Error syncing unlocked assessment to Firebase:', error);
+      });
   };
 
   const getExportedAssessments = async (): Promise<AssessmentRecord[]> => {
-    return await DatabaseService.getExportedAssessments();
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return assessments.filter(a => a.exportedToAdmin === true);
   };
 
   const getDraftAssessments = async (trainerId: string): Promise<AssessmentRecord[]> => {
-    return await DatabaseService.getDraftAssessments(trainerId);
+    // Use React state instead of localStorage (which may be empty due to quota)
+    return assessments.filter(a => a.trainerId === trainerId && a.exportedToAdmin !== true);
   };
 
   const markAssessmentReviewedByAdmin = async (assessmentId: string, adminId: string): Promise<void> => {
-    await DatabaseService.markAssessmentReviewedByAdmin(assessmentId, adminId);
-    await refreshAssessments();
-
-    // Sync to Firebase in background and mark as synced if successful
-    const reviewedRecord = await DatabaseService.getAssessmentRecords().then(a => a.find(ar => ar.id === assessmentId));
-    if (reviewedRecord) {
-      FirebaseSyncService.syncAssessment(reviewedRecord)
-        .then(async (synced) => {
-          if (synced) {
-            await DatabaseService.markAssessmentsSynced([assessmentId]);
-          }
-        })
-        .catch(error => {
-          logger.error('Error syncing reviewed assessment to Firebase:', error);
-        });
+    // Find assessment in React state (not localStorage which may be empty)
+    const assessment = assessments.find(a => a.id === assessmentId);
+    if (!assessment) {
+      throw new Error('Assessment not found');
     }
+
+    // Create updated record
+    const updatedAssessment: AssessmentRecord = {
+      ...assessment,
+      reviewedByAdmin: true,
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: adminId
+    };
+
+    // Update React state
+    setAssessments(prev => prev.map(a => a.id === assessmentId ? updatedAssessment : a));
+
+    // Try to save to localStorage (may fail due to quota)
+    safeLocalStorageSet('assessments', JSON.stringify(
+      assessments.map(a => a.id === assessmentId ? updatedAssessment : a)
+    ));
+
+    // Sync to Firebase
+    FirebaseSyncService.syncAssessment(updatedAssessment)
+      .then(synced => {
+        if (synced) {
+          logger.log(`Assessment ${assessmentId} marked as reviewed and synced to Firebase`);
+        }
+      })
+      .catch(error => {
+        logger.error('Error syncing reviewed assessment to Firebase:', error);
+      });
   };
 
   // Refresh operations
@@ -740,6 +958,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Sync status
     syncStatus,
     pendingSyncCount,
+    syncProgress,
 
     // Student operations
     addStudent,

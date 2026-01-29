@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -23,7 +23,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Chip,
   Accordion,
   AccordionSummary,
@@ -47,8 +46,7 @@ const Assessments: React.FC = () => {
   const {
     students,
     groups,
-    addAssessmentRecord,
-    getAssessmentsByGroup,
+    assessments,  // Use assessments directly from context for real-time updates
     exportMultipleAssessmentsToAdmin,
     adminExportAssessment,
     updateAssessmentRecord,
@@ -56,10 +54,15 @@ const Assessments: React.FC = () => {
     loading
   } = useDatabase();
   const { user } = useAuth();
-  
+
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
-  const [savedAssessments, setSavedAssessments] = useState<AssessmentRecord[]>([]);
+
+  // Filter assessments from context instead of maintaining separate state
+  // This ensures UI always reflects the latest data after exports/updates
+  const savedAssessments = selectedGroup !== 'all'
+    ? assessments.filter(a => a.groupId === selectedGroup)
+    : [];
 
   // Export dialog state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -94,32 +97,10 @@ const Assessments: React.FC = () => {
         );
       });
 
-  const getGroupName = (groupId: string) => {
-    const group = groups.find(g => g.id === groupId);
-    return group ? group.name : 'Unknown Group';
-  };
-
   const getStudentName = (studentId: string) => {
     const student = students.find(s => s.id === studentId);
     return student ? student.name : 'Unknown Student';
   };
-
-  const loadSavedAssessments = async () => {
-    if (selectedGroup !== 'all') {
-      try {
-        const assessments = await getAssessmentsByGroup(selectedGroup);
-        setSavedAssessments(assessments);
-      } catch (error) {
-        logger.error('Error loading saved assessments:', error);
-      }
-    } else {
-      setSavedAssessments([]);
-    }
-  };
-
-  useEffect(() => {
-    loadSavedAssessments();
-  }, [selectedGroup]);
 
   // Export to Admin handlers
   const handleExportClick = (assessments: AssessmentRecord[]) => {
@@ -137,7 +118,7 @@ const Assessments: React.FC = () => {
 
       setExportDialogOpen(false);
       setSelectedForExport([]);
-      await loadSavedAssessments();
+      // No need to reload - UI updates automatically from context state
 
       alert(
         `Export complete!\n✅ Success: ${result.success}\n` +
@@ -178,7 +159,7 @@ const Assessments: React.FC = () => {
       setEditDialogOpen(false);
       setEditingAssessment(null);
       setEditScore('');
-      await loadSavedAssessments();
+      // No need to reload - UI updates automatically from context state
 
       alert('Assessment updated successfully!');
     } catch (error) {
@@ -201,7 +182,7 @@ const Assessments: React.FC = () => {
 
       setDeleteDialogOpen(false);
       setDeletingAssessment(null);
-      await loadSavedAssessments();
+      // No need to reload - UI updates automatically from context state
 
       alert('Assessment deleted successfully!');
     } catch (error) {
@@ -216,7 +197,7 @@ const Assessments: React.FC = () => {
 
     try {
       await adminExportAssessment(assessment.id, user.id);
-      await loadSavedAssessments();
+      // No need to reload - UI updates automatically from context state
       alert('Assessment exported successfully!');
     } catch (error) {
       logger.error('Admin export failed:', error);
@@ -264,7 +245,7 @@ const Assessments: React.FC = () => {
 
       setBulkDeleteDialogOpen(false);
       setDeletingAssessmentGroup(null);
-      await loadSavedAssessments();
+      // No need to reload - UI updates automatically from context state
 
       alert(
         `Delete complete!\n✅ Deleted: ${successCount}\n` +
