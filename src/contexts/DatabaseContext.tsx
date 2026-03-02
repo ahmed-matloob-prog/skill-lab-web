@@ -182,32 +182,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   /**
-   * One-time migration: tag existing attendance records with unit from their group
+   * Read current groups from localStorage (avoids stale React state closure)
    */
-  const migrateAttendanceUnits = (attendanceData: AttendanceRecord[], groupsData: Group[]): AttendanceRecord[] => {
-    const migrated = localStorage.getItem('attendance_unit_migrated');
-    if (migrated) return attendanceData;
-
-    const groupMap = new Map(groupsData.map(g => [g.id, g]));
-    let changed = false;
-
-    const updated = attendanceData.map(record => {
-      if (!record.unit) {
-        const group = groupMap.get(record.groupId);
-        if (group?.currentUnit) {
-          changed = true;
-          return { ...record, unit: group.currentUnit };
-        }
-      }
-      return record;
-    });
-
-    if (changed) {
-      safeLocalStorageSet('attendance', JSON.stringify(updated));
-    }
-    localStorage.setItem('attendance_unit_migrated', 'true');
-    logger.log('DatabaseContext: Attendance unit migration completed');
-    return updated;
+  const getGroupsFromStorage = (): Group[] => {
+    try {
+      return JSON.parse(localStorage.getItem('groups') || '[]');
+    } catch { return []; }
   };
 
   const initializeDatabase = async () => {
@@ -223,22 +203,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         refreshGroups(),
       ]);
 
-      // Run one-time migration to tag attendance records with units
+      // Load all attendance (can't filter by unit - old records lack unit tags)
       const allAttendance = await DatabaseService.getAttendanceRecords();
-      const groupsData = await DatabaseService.getGroups();
-      const migratedAttendance = migrateAttendanceUnits(allAttendance, groupsData);
+      setAttendance(allAttendance);
 
-      // Filter attendance/assessments to current units only
+      // Filter assessments to current units only (assessments have accurate unit data)
+      const groupsData = getGroupsFromStorage();
       const currentUnits = getCurrentUnits(groupsData);
       const allAssessments = await DatabaseService.getAssessmentRecords();
-
-      const filteredAttendance = filterByCurrentUnits(migratedAttendance, currentUnits);
       const filteredAssessments = filterByCurrentUnits(allAssessments, currentUnits);
-
-      setAttendance(filteredAttendance);
       setAssessments(filteredAssessments);
 
-      logger.log(`DatabaseContext: Loaded ${filteredAttendance.length}/${migratedAttendance.length} attendance, ${filteredAssessments.length}/${allAssessments.length} assessments (current units: ${currentUnits.join(', ') || 'none'})`);
+      logger.log(`DatabaseContext: Loaded ${allAttendance.length} attendance (all), ${filteredAssessments.length}/${allAssessments.length} assessments (current units: ${currentUnits.join(', ') || 'none'})`);
 
       // If Firebase is available, sync in background
       if (FirebaseSyncService.isAvailable()) {
@@ -363,11 +339,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseAttendance.length > 0) {
         const mergedAttendance = mergeDataWithConflictResolution(localAttendance, firebaseAttendance);
         safeLocalStorageSet('attendance', JSON.stringify(mergedAttendance));
-        // Apply unit filter unless full data is already loaded
-        const currentUnits = getCurrentUnits(groups);
-        const displayAttendance = isFullDataLoaded ? mergedAttendance : filterByCurrentUnits(mergedAttendance, currentUnits);
-        setAttendance(displayAttendance);
-        logger.log(`DatabaseContext: Merged attendance: ${localAttendance.length} local + ${firebaseAttendance.length} firebase = ${mergedAttendance.length} total (displaying ${displayAttendance.length})`);
+        // Load all attendance (old records lack unit tags, can't filter accurately)
+        setAttendance(mergedAttendance);
+        logger.log(`DatabaseContext: Merged attendance: ${localAttendance.length} local + ${firebaseAttendance.length} firebase = ${mergedAttendance.length} total`);
       }
 
       // Step 3: Fetch and merge assessments (largest collection)
@@ -390,8 +364,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseAssessments.length > 0) {
         const mergedAssessments = mergeDataWithConflictResolution(localAssessments, firebaseAssessments);
         safeLocalStorageSet('assessments', JSON.stringify(mergedAssessments));
-        // Apply unit filter unless full data is already loaded
-        const currentUnits = getCurrentUnits(groups);
+        // Filter assessments by current units (read from localStorage to avoid stale state)
+        const latestGroups = getGroupsFromStorage();
+        const currentUnits = getCurrentUnits(latestGroups);
         const displayAssessments = isFullDataLoaded ? mergedAssessments : filterByCurrentUnits(mergedAssessments, currentUnits);
         setAssessments(displayAssessments);
         logger.log(`DatabaseContext: Merged assessments: ${localAssessments.length} local + ${firebaseAssessments.length} firebase = ${mergedAssessments.length} total (displaying ${displayAssessments.length})`);
@@ -463,7 +438,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       logger.log(`DatabaseContext: Merged ${firebaseAttendance.length} Firebase attendance with ${localAttendance.length} local = ${mergedAttendance.length}`);
     });
 
-    // Subscribe to assessments with conflict resolution
+    // Subscribe to assessments with conflict resolution + unit filtering
     FirebaseSyncService.subscribeToAssessments((firebaseAssessments) => {
       const localAssessments = JSON.parse(localStorage.getItem('assessments') || '[]');
       if (firebaseAssessments.length === 0 && localAssessments.length > 0) {
@@ -472,8 +447,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       const mergedAssessments = mergeDataWithConflictResolution(localAssessments, firebaseAssessments);
       safeLocalStorageSet('assessments', JSON.stringify(mergedAssessments));
-      setAssessments(mergedAssessments);
-      logger.log(`DatabaseContext: Merged ${firebaseAssessments.length} Firebase assessments with ${localAssessments.length} local = ${mergedAssessments.length}`);
+      // Apply unit filter (read groups from localStorage to avoid stale closure)
+      const latestGroups = getGroupsFromStorage();
+      const currentUnits = getCurrentUnits(latestGroups);
+      const displayAssessments = filterByCurrentUnits(mergedAssessments, currentUnits);
+      setAssessments(displayAssessments);
+      logger.log(`DatabaseContext: Merged ${firebaseAssessments.length} Firebase assessments with ${localAssessments.length} local = ${mergedAssessments.length} (displaying ${displayAssessments.length})`);
     });
 
     logger.log('DatabaseContext: Real-time listeners established with conflict resolution');
