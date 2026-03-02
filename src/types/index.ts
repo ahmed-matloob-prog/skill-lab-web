@@ -31,6 +31,7 @@ export interface AttendanceRecord {
   trainerId: string;
   year: number;
   groupId: string;
+  unit?: string; // Unit tag for filtering (Year 2/3)
   notes?: string;
 }
 

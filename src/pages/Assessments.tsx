@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -51,9 +51,18 @@ const Assessments: React.FC = () => {
     adminExportAssessment,
     updateAssessmentRecord,
     deleteAssessmentRecord,
-    loading
+    loading,
+    loadFullData,
+    isFullDataLoaded,
   } = useDatabase();
   const { user } = useAuth();
+
+  // Load all historical data so all assessments are visible
+  useEffect(() => {
+    if (!isFullDataLoaded) {
+      loadFullData();
+    }
+  }, [isFullDataLoaded]);
 
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');

@@ -44,8 +44,15 @@ import { Student, User } from '../types';
 import AuthService from '../services/authService';
 
 const TrainerReports: React.FC = () => {
-  const { students, groups, attendance, assessments, loading } = useDatabase();
+  const { students, groups, attendance, assessments, loading, loadFullData, isFullDataLoaded } = useDatabase();
   const { user } = useAuth();
+
+  // Load all historical data for reports
+  useEffect(() => {
+    if (!isFullDataLoaded) {
+      loadFullData();
+    }
+  }, [isFullDataLoaded]);
 
   const [selectedTrainer, setSelectedTrainer] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');

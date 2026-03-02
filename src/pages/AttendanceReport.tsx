@@ -61,7 +61,14 @@ interface AttendanceGridData {
 }
 
 const AttendanceReport: React.FC = () => {
-  const { students, groups, attendance, assessments, loading } = useDatabase();
+  const { students, groups, attendance, assessments, loading, loadFullData, isFullDataLoaded } = useDatabase();
+
+  // Load all historical data for reports
+  useEffect(() => {
+    if (!isFullDataLoaded) {
+      loadFullData();
+    }
+  }, [isFullDataLoaded]);
   const { user } = useAuth();
 
   // Filter states

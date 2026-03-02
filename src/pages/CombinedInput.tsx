@@ -282,6 +282,7 @@ const CombinedInput: React.FC = () => {
           if (existingRecord) {
             await updateAttendanceRecord(existingRecord.id, { status: data.attendance });
           } else {
+            const studentGroup = groups.find(g => g.id === student.groupId);
             const newRecord: Omit<AttendanceRecord, 'id' | 'timestamp'> = {
               studentId: student.id,
               date: dateString,
@@ -290,6 +291,7 @@ const CombinedInput: React.FC = () => {
               trainerId: user?.id || '',
               year: student.year,
               groupId: student.groupId,
+              unit: selectedUnit !== 'all' ? selectedUnit : studentGroup?.currentUnit,
             };
             await addAttendanceRecord(newRecord);
           }

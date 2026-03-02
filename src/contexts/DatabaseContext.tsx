@@ -81,6 +81,10 @@ interface DatabaseContextType {
   getDraftAssessments: (trainerId: string) => Promise<AssessmentRecord[]>;
   markAssessmentReviewedByAdmin: (assessmentId: string, adminId: string) => Promise<void>;
 
+  // Lazy loading
+  isFullDataLoaded: boolean;
+  loadFullData: () => Promise<void>;
+
   // Refresh operations
   refreshStudents: () => Promise<void>;
   refreshGroups: () => Promise<void>;
@@ -124,6 +128,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isFullDataLoaded, setIsFullDataLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({
@@ -155,6 +160,56 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => clearInterval(interval);
   }, []);
 
+  /**
+   * Get current units from groups (what's actively being studied)
+   */
+  const getCurrentUnits = (groupsData: Group[]): string[] => {
+    return groupsData
+      .map(g => g.currentUnit)
+      .filter((u): u is string => !!u);
+  };
+
+  /**
+   * Filter records to only include current unit data.
+   * Records without a unit (Years 1,4,5,6) are always included.
+   */
+  const filterByCurrentUnits = <T extends { unit?: string }>(
+    records: T[],
+    currentUnits: string[]
+  ): T[] => {
+    if (currentUnits.length === 0) return records; // No units set, load all
+    return records.filter(r => !r.unit || currentUnits.includes(r.unit));
+  };
+
+  /**
+   * One-time migration: tag existing attendance records with unit from their group
+   */
+  const migrateAttendanceUnits = (attendanceData: AttendanceRecord[], groupsData: Group[]): AttendanceRecord[] => {
+    const migrated = localStorage.getItem('attendance_unit_migrated');
+    if (migrated) return attendanceData;
+
+    const groupMap = new Map(groupsData.map(g => [g.id, g]));
+    let changed = false;
+
+    const updated = attendanceData.map(record => {
+      if (!record.unit) {
+        const group = groupMap.get(record.groupId);
+        if (group?.currentUnit) {
+          changed = true;
+          return { ...record, unit: group.currentUnit };
+        }
+      }
+      return record;
+    });
+
+    if (changed) {
+      safeLocalStorageSet('attendance', JSON.stringify(updated));
+    }
+    localStorage.setItem('attendance_unit_migrated', 'true');
+    logger.log('DatabaseContext: Attendance unit migration completed');
+    return updated;
+  };
+
   const initializeDatabase = async () => {
     try {
       setLoading(true);
@@ -162,13 +217,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Initialize localStorage
       await DatabaseService.initDatabase();
 
-      // Load from localStorage first (instant display)
+      // Load students and groups fully (small datasets, always needed)
       await Promise.all([
         refreshStudents(),
         refreshGroups(),
-        refreshAttendance(),
-        refreshAssessments(),
       ]);
+
+      // Run one-time migration to tag attendance records with units
+      const allAttendance = await DatabaseService.getAttendanceRecords();
+      const groupsData = await DatabaseService.getGroups();
+      const migratedAttendance = migrateAttendanceUnits(allAttendance, groupsData);
+
+      // Filter attendance/assessments to current units only
+      const currentUnits = getCurrentUnits(groupsData);
+      const allAssessments = await DatabaseService.getAssessmentRecords();
+
+      const filteredAttendance = filterByCurrentUnits(migratedAttendance, currentUnits);
+      const filteredAssessments = filterByCurrentUnits(allAssessments, currentUnits);
+
+      setAttendance(filteredAttendance);
+      setAssessments(filteredAssessments);
+
+      logger.log(`DatabaseContext: Loaded ${filteredAttendance.length}/${migratedAttendance.length} attendance, ${filteredAssessments.length}/${allAssessments.length} assessments (current units: ${currentUnits.join(', ') || 'none'})`);
 
       // If Firebase is available, sync in background
       if (FirebaseSyncService.isAvailable()) {
@@ -293,8 +363,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseAttendance.length > 0) {
         const mergedAttendance = mergeDataWithConflictResolution(localAttendance, firebaseAttendance);
         safeLocalStorageSet('attendance', JSON.stringify(mergedAttendance));
-        setAttendance(mergedAttendance);
-        logger.log(`DatabaseContext: Merged attendance: ${localAttendance.length} local + ${firebaseAttendance.length} firebase = ${mergedAttendance.length} total`);
+        // Apply unit filter unless full data is already loaded
+        const currentUnits = getCurrentUnits(groups);
+        const displayAttendance = isFullDataLoaded ? mergedAttendance : filterByCurrentUnits(mergedAttendance, currentUnits);
+        setAttendance(displayAttendance);
+        logger.log(`DatabaseContext: Merged attendance: ${localAttendance.length} local + ${firebaseAttendance.length} firebase = ${mergedAttendance.length} total (displaying ${displayAttendance.length})`);
       }
 
       // Step 3: Fetch and merge assessments (largest collection)
@@ -317,8 +390,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseAssessments.length > 0) {
         const mergedAssessments = mergeDataWithConflictResolution(localAssessments, firebaseAssessments);
         safeLocalStorageSet('assessments', JSON.stringify(mergedAssessments));
-        setAssessments(mergedAssessments);
-        logger.log(`DatabaseContext: Merged assessments: ${localAssessments.length} local + ${firebaseAssessments.length} firebase = ${mergedAssessments.length} total`);
+        // Apply unit filter unless full data is already loaded
+        const currentUnits = getCurrentUnits(groups);
+        const displayAssessments = isFullDataLoaded ? mergedAssessments : filterByCurrentUnits(mergedAssessments, currentUnits);
+        setAssessments(displayAssessments);
+        logger.log(`DatabaseContext: Merged assessments: ${localAssessments.length} local + ${firebaseAssessments.length} firebase = ${mergedAssessments.length} total (displaying ${displayAssessments.length})`);
       }
 
       // Step 4: Complete
@@ -947,6 +1023,29 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return updatedCount;
   };
 
+  /**
+   * Load all historical data (all units) into React state.
+   * Called on-demand by report pages that need complete data.
+   */
+  const loadFullData = async (): Promise<void> => {
+    if (isFullDataLoaded) return;
+    logger.log('DatabaseContext: Loading full historical data...');
+
+    try {
+      // Load ALL from localStorage (unfiltered)
+      const allAttendance = await DatabaseService.getAttendanceRecords();
+      const allAssessments = await DatabaseService.getAssessmentRecords();
+
+      setAttendance(allAttendance);
+      setAssessments(allAssessments);
+      setIsFullDataLoaded(true);
+
+      logger.log(`DatabaseContext: Full data loaded - ${allAttendance.length} attendance, ${allAssessments.length} assessments`);
+    } catch (error) {
+      logger.error('DatabaseContext: Error loading full data:', error);
+    }
+  };
+
   const value: DatabaseContextType = {
     // Data
     students,
@@ -996,6 +1095,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     getExportedAssessments,
     getDraftAssessments,
     markAssessmentReviewedByAdmin,
+
+    // Lazy loading
+    isFullDataLoaded,
+    loadFullData,
 
     // Refresh operations
     refreshStudents,
